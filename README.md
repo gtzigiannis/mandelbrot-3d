@@ -1,1 +1,10 @@
-# mandelbrot-3d
+# Mandelbrot 3D
+
+An interactive, browser-based visualization of the Mandelbrot set as a
+three-dimensional escape-time landscape. The page pairs the 3D view with a
+selectable 2D parameter-plane view and explanatory material in Greek.
+
+## Explore
+
+- [Mandelbrot 3D](https://gtzigiannis.github.io/mandelbrot-3d/)
+- [Mandelbrot-wavelet](https://gtzigiannis.github.io/mandelbrot-wavelet/)
