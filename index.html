@@ -24,6 +24,9 @@ body{
 header{max-width:1280px;margin:0 auto;padding:18px 14px 10px}
 h1{font-size:clamp(1.25rem,3.6vw,1.9rem);line-height:1.2;margin:0 0 6px;letter-spacing:.2px}
 header p{margin:0;color:var(--mut);max-width:80ch;font-size:.95rem}
+header p.navlink{margin-top:8px}
+.navlink a{color:var(--acc);font-weight:600;text-decoration:none;display:inline-flex;align-items:center;min-height:36px}
+.navlink a:hover{text-decoration:underline}
 h2{font-size:1.02rem;margin:0 0 10px;letter-spacing:.2px}
 sub{font-size:.75em}
 
@@ -171,6 +174,7 @@ noscript{display:block;max-width:1280px;margin:10px auto;padding:12px 14px;backg
 <header>
   <h1>Το σύνολο Mandelbrot ως τρισδιάστατο τοπίο</h1>
   <p>Διαδραστικό τοπίο χρόνου διαφυγής: κάθε σημείο <i>c</i> = <i>a</i> + <i>b</i>i του μιγαδικού επιπέδου παίρνει ύψος ανάλογα με το πόσο γρήγορα διαφεύγει η τροχιά <i>z</i><sub>0</sub> = 0, <i>z</i><sub><i>n</i>+1</sub> = <i>z</i><sub><i>n</i></sub>² + <i>c</i>.</p>
+  <p class="navlink"><a href="wavelets.html">Νέο: κυματίδια και διπλασιασμός περιόδου στον πραγματικό άξονα →</a></p>
 </header>
 <noscript>Η σελίδα χρειάζεται JavaScript για να υπολογίσει και να σχεδιάσει το σύνολο Mandelbrot.</noscript>
 
