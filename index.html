@@ -1,0 +1,1201 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Σύνολο Mandelbrot — τρισδιάστατο τοπίο χρόνου διαφυγής</title>
+<meta name="description" content="Διαδραστική τρισδιάστατη απεικόνιση του συνόλου Mandelbrot ως τοπίο χρόνου διαφυγής, με 2D προβολή, επιλογή σημείων και εξηγήσεις στα ελληνικά.">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1020'/%3E%3Cpath d='M5 24c2-9 5-14 9-14s5 4 6 4 3-3 5-1c2 3 1 8-2 11z' fill='%235eead4'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0b1020; --card:rgba(255,255,255,.05); --line:rgba(255,255,255,.12);
+  --txt:#e9edf9; --mut:#a8b2cd; --acc:#5eead4; --acc2:#ff5c93; --warn:#ffd166; --ok:#7ee05a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; color:var(--txt); background:var(--bg);
+  background-image:radial-gradient(1100px 520px at 15% -10%,#1d2c5c 0%,transparent 62%),radial-gradient(900px 480px at 100% 0%,#3a1d4d 0%,transparent 55%);
+  background-repeat:no-repeat;
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+header{max-width:1280px;margin:0 auto;padding:18px 14px 10px}
+h1{font-size:clamp(1.25rem,3.6vw,1.9rem);line-height:1.2;margin:0 0 6px;letter-spacing:.2px}
+header p{margin:0;color:var(--mut);max-width:80ch;font-size:.95rem}
+h2{font-size:1.02rem;margin:0 0 10px;letter-spacing:.2px}
+sub{font-size:.75em}
+
+.layout{display:flex;flex-direction:column;gap:14px;max-width:1280px;margin:0 auto;padding:0 12px 30px}
+.colL,.colR{display:contents}
+.o1{order:1}.o2{order:2}.o3{order:3}.o4{order:4}.o5{order:5}.o6{order:6}
+@media (min-width:980px){
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:18px;align-items:start}
+  .colL,.colR{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .colR{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;padding-right:2px}
+}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 14px 12px}
+.card p{margin:.55em 0}
+.note p{font-size:.93rem;color:#d7def2}
+.note b{color:#fff}
+
+/* stage */
+.stagewrap{display:flex;flex-direction:column;gap:8px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between}
+.seg{display:inline-flex;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--mut);font:inherit;font-weight:600;font-size:.92rem;
+  padding:8px 16px;min-height:40px;border-radius:999px;cursor:pointer
+}
+.seg button[aria-pressed="true"]{background:var(--acc);color:#04201c}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+.info{font-size:.8rem;color:var(--mut);min-width:0;flex:1 1 240px;text-align:right}
+@media (max-width:640px){.info{text-align:left}}
+
+.stage{
+  position:relative;height:clamp(340px,56vh,720px);height:clamp(340px,56svh,720px);
+  border:1px solid var(--line);border-radius:18px;overflow:hidden;
+  background:radial-gradient(120% 90% at 50% 0%,#233463 0%,#111a36 55%,#0b1226 100%);
+  touch-action:none;user-select:none;-webkit-user-select:none;
+}
+@media (min-width:980px){.stage{height:clamp(480px,76vh,800px)}}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#glc{pointer-events:none}
+#ovc{touch-action:none;cursor:grab;outline:none}
+#ovc:active{cursor:grabbing}
+#ovc:focus-visible,#flc:focus-visible{box-shadow:inset 0 0 0 2px var(--acc)}
+#flc{cursor:crosshair;display:none;touch-action:manipulation}
+.stage.is2d #glc,.stage.is2d #ovc,.stage.is2d #mini{display:none}
+.stage.is2d #flc{display:block}
+
+#mini{
+  position:absolute;top:10px;right:10px;left:auto;bottom:auto;width:104px;height:104px;border:1px solid rgba(255,255,255,.35);
+  border-radius:10px;background:#0b1226;cursor:crosshair;touch-action:manipulation;box-shadow:0 4px 18px rgba(0,0,0,.45)
+}
+@media (min-width:700px){#mini{width:128px;height:128px}}
+@media (max-width:699px){#mini{top:auto;bottom:10px;width:84px;height:84px}}
+.topleft{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;max-width:calc(100% - 150px);pointer-events:none;z-index:3}
+.stage.is2d .topleft{max-width:calc(100% - 20px)}
+
+.prog{
+  width:240px;max-width:100%;
+  background:rgba(8,12,26,.86);border:1px solid var(--line);border-radius:12px;padding:7px 10px;
+  font-size:.8rem;display:none
+}
+.prog.on{display:block}
+.prog .track{height:6px;border-radius:99px;background:rgba(255,255,255,.14);margin-top:5px;overflow:hidden}
+.prog .fill{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .12s linear}
+
+.hint{
+  position:absolute;left:50%;bottom:10px;transform:translateX(-50%);max-width:calc(100% - 20px);
+  font-size:.76rem;color:#dfe6fb;background:rgba(8,12,26,.72);border:1px solid var(--line);
+  padding:5px 10px;border-radius:999px;text-align:center;pointer-events:none;transition:opacity .6s
+}
+.hint.hide{opacity:0}
+@media (max-width:699px){.hint{left:10px;transform:none;max-width:calc(100% - 112px);border-radius:12px;text-align:left}}
+.hint .fine{display:inline}.hint .coarse{display:none}
+@media (pointer:coarse){.hint .fine{display:none}.hint .coarse{display:inline}}
+
+.chip{
+  font-size:.82rem;background:rgba(8,12,26,.88);border:1px solid var(--line);border-radius:12px;padding:6px 10px;
+  display:none;color:#fff;cursor:pointer;pointer-events:auto
+}
+.chip.on{display:block}
+.chip .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+.msg{
+  position:absolute;inset:auto 10px 10px 10px;background:rgba(60,20,30,.9);border:1px solid #ff5c93;border-radius:12px;
+  padding:8px 12px;font-size:.85rem;display:none
+}
+.msg.on{display:block}
+
+/* controls */
+.ctl{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px;margin:10px 0}
+.ctl label{font-weight:600;font-size:.92rem}
+.ctl output{font-variant-numeric:tabular-nums;color:var(--acc);font-weight:700}
+.ctl input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--acc);height:28px;margin:0}
+.ctl select{
+  grid-column:1/-1;width:100%;min-height:44px;font:inherit;color:var(--txt);background:#141c38;border:1px solid var(--line);
+  border-radius:12px;padding:8px 10px
+}
+.small{font-size:.78rem;color:var(--mut);margin:2px 0 0;grid-column:1/-1}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btn{
+  appearance:none;font:inherit;font-weight:600;font-size:.9rem;color:var(--txt);cursor:pointer;
+  background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:12px;padding:8px 14px;min-height:44px
+}
+.btn:hover{background:rgba(255,255,255,.12)}
+.btn.primary{background:var(--acc);color:#04201c;border-color:transparent}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.seg button:focus-visible,select:focus-visible,input:focus-visible,.chips button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* selection */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:baseline;margin:6px 0}
+.kv span{color:var(--mut);font-size:.88rem}
+.kv b{font-weight:700;overflow-wrap:anywhere}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.88rem}
+.badge.esc{background:rgba(255,92,147,.18);color:#ffb3cd;border:1px solid rgba(255,92,147,.5)}
+.badge.bnd{background:rgba(94,234,212,.14);color:#aef4e8;border:1px solid rgba(94,234,212,.45)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;color:#c9d3ef;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.chips button{
+  appearance:none;font:inherit;font-size:.82rem;color:var(--txt);background:rgba(255,255,255,.06);
+  border:1px solid var(--line);border-radius:999px;padding:6px 12px;min-height:36px;cursor:pointer
+}
+.chips button:hover{background:rgba(255,255,255,.12)}
+.lead{font-size:.8rem;color:var(--mut);margin:12px 0 0}
+
+/* legend */
+.ramp{height:16px;border-radius:8px;border:1px solid var(--line);margin:8px 0 22px;position:relative}
+.ramp .t{position:absolute;top:19px;font-size:.72rem;color:var(--mut);transform:translateX(-50%);white-space:nowrap}
+.ramp .t:first-child{transform:none}
+.ramp .t:last-child{transform:translateX(-100%)}
+.legend ul{list-style:none;margin:6px 0 0;padding:0}
+.legend li{display:flex;gap:10px;align-items:flex-start;font-size:.88rem;margin:6px 0}
+.sw{flex:none;width:16px;height:16px;border-radius:5px;margin-top:3px;border:1px solid rgba(255,255,255,.4)}
+.sw.b{background:rgb(20,16,38)}
+.sw.p{border-radius:50%;background:transparent;border:2px solid #fff;box-shadow:0 0 0 1px #000}
+details{margin-top:6px}
+summary{cursor:pointer;font-weight:600;padding:6px 0}
+details ul{margin:6px 0;padding-left:1.2em;font-size:.9rem;color:#d7def2}
+details li{margin:4px 0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88em;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px}
+footer{max-width:1280px;margin:0 auto;padding:0 14px 26px;color:var(--mut);font-size:.8rem}
+noscript{display:block;max-width:1280px;margin:10px auto;padding:12px 14px;background:#3a1020;border-radius:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Το σύνολο Mandelbrot ως τρισδιάστατο τοπίο</h1>
+  <p>Διαδραστικό τοπίο χρόνου διαφυγής: κάθε σημείο <i>c</i> = <i>a</i> + <i>b</i>i του μιγαδικού επιπέδου παίρνει ύψος ανάλογα με το πόσο γρήγορα διαφεύγει η τροχιά <i>z</i><sub>0</sub> = 0, <i>z</i><sub><i>n</i>+1</sub> = <i>z</i><sub><i>n</i></sub>² + <i>c</i>.</p>
+</header>
+<noscript>Η σελίδα χρειάζεται JavaScript για να υπολογίσει και να σχεδιάσει το σύνολο Mandelbrot.</noscript>
+
+<main class="layout">
+  <div class="colL">
+    <section class="o1 stagewrap" aria-label="Γράφημα">
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Τρόπος προβολής">
+          <button id="tab3d" type="button" aria-pressed="true">3D τοπίο</button>
+          <button id="tab2d" type="button" aria-pressed="false">2D εικόνα</button>
+        </div>
+        <div class="info" id="viewInfo" aria-live="off"></div>
+      </div>
+      <div class="stage is3d" id="stage">
+        <canvas id="glc"></canvas>
+        <canvas id="ovc" tabindex="0" role="img" aria-label="Τρισδιάστατο τοπίο χρόνου διαφυγής του συνόλου Mandelbrot. Βελάκια: περιστροφή, + και −: ζουμ, R: επαναφορά κάμερας."></canvas>
+        <canvas id="flc" tabindex="0" role="img" aria-label="Δισδιάστατη εικόνα του συνόλου Mandelbrot. Πατήστε σε ένα σημείο για να το επιλέξετε."></canvas>
+        <canvas id="mini" aria-label="Μικρογραφία 2D· πατήστε για επιλογή σημείου"></canvas>
+        <div class="topleft">
+          <div class="prog" id="prog" role="status" aria-live="polite"><span id="progTxt">Υπολογισμός…</span><div class="track"><div class="fill" id="progFill"></div></div></div>
+          <div class="chip" id="chip" role="button" tabindex="0" title="Μετάβαση στις λεπτομέρειες του σημείου"></div>
+        </div>
+        <div class="hint" id="hint"><span class="fine">Σύρσιμο: περιστροφή · Δεξί κλικ ή Shift+σύρσιμο: μετακίνηση · Ροδέλα: ζουμ · Κλικ: επιλογή</span><span class="coarse">Ένα δάχτυλο: περιστροφή · Δύο δάχτυλα: ζουμ και μετακίνηση · Πάτημα: επιλογή</span></div>
+        <div class="msg" id="msg" role="alert"></div>
+      </div>
+    </section>
+
+    <section class="card note o3" aria-labelledby="hNote">
+      <h2 id="hNote">Τι δείχνει το γράφημα</h2>
+      <p><b>Ο ορισμός.</b> Για κάθε μιγαδικό <i>c</i> = <i>a</i> + <i>b</i>i ξεκινάμε από <i>z</i><sub>0</sub> = 0 και επαναλαμβάνουμε <i>z</i><sub><i>n</i>+1</sub> = <i>z</i><sub><i>n</i></sub>² + <i>c</i>. Αν σε κάποιο βήμα |<i>z</i><sub><i>n</i></sub>| &gt; 2, η τροχιά διαφεύγει στο άπειρο και καταγράφουμε το βήμα <i>n</i>. Αν δεν διαφύγει στις <i>N</i> επαναλήψεις που υπολογίσαμε, γράφουμε μόνο «δεν διέφυγε στις <i>N</i> επαναλήψεις»: ένας πεπερασμένος υπολογισμός δεν αποδεικνύει ότι το <i>c</i> ανήκει στο σύνολο.</p>
+      <p><b>Το ενδιαφέρον σύνορο.</b> Χωρίζει τις τιμές <i>c</i> για τις οποίες η τροχιά του 0 παραμένει φραγμένη από εκείνες για τις οποίες διαφεύγει. Όσο μεγεθύνουμε κοντά σε αυτό το σύνορο, περίπλοκες δομές εμφανίζονται ξανά και ξανά σε όλο και μικρότερη κλίμακα — δοκιμάστε «Μεγέθυνση ×4 εδώ» και αυξήστε το όριο επαναλήψεων.</p>
+      <p><b>Ο κατακόρυφος άξονας.</b> Οι οριζόντιοι άξονες είναι τα Re(<i>c</i>) και Im(<i>c</i>). Το ύψος (ο χρόνος διαφυγής) είναι <b>επιλογή οπτικοποίησης</b>, όχι τρίτη διάσταση του ορισμού του συνόλου: το σύνολο Mandelbrot ζει στο μιγαδικό επίπεδο.</p>
+      <p><b>Ορολογία.</b> Το σύνολο Mandelbrot <b>συνήθως δεν ονομάζεται «παράξενος ελκυστής»</b> (<i>strange attractor</i>): είναι σύνολο παραμέτρων <i>c</i>, όχι ελκυστής μιας τροχιάς. Το «Humpty Dumpty» είναι ανεπίσημο προσωπικό παρατσούκλι του δημιουργού αυτής της σελίδας — <b>όχι</b> καθιερωμένο μαθηματικό όνομα.</p>
+    </section>
+
+    <section class="card o6" aria-labelledby="hDet">
+      <h2 id="hDet">Λεπτομέρειες υπολογισμού και κλίμακας</h2>
+      <details>
+        <summary>Πώς υπολογίζεται και πώς κλιμακώνεται το ύψος</summary>
+        <ul>
+          <li><b>Χρόνος διαφυγής:</b> <i>n</i> είναι το μικρότερο <i>n</i> ≥ 1 με |<i>z</i><sub><i>n</i></sub>| &gt; 2, αν υπάρχει <i>n</i> ≤ <i>N</i>. Αν δεν υπάρχει, το σημείο «δεν διέφυγε στις <i>N</i> επαναλήψεις».</li>
+          <li><b>Γιατί ο δίσκος ακτίνας 2:</b> αν |<i>z</i><sub><i>n</i></sub>| &gt; 2 (και |<i>c</i>| ≤ 2), τότε η τροχιά αναγκαστικά τείνει στο άπειρο· άρα η διαφυγή αποδεικνύει ότι το <i>c</i> δεν ανήκει στο σύνολο.</li>
+          <li><b>Ομαλοποίηση (μόνο για την εμφάνιση):</b> για να μην εμφανίζονται «σκαλοπάτια», το ύψος και το χρώμα χρησιμοποιούν την τιμή ν = <i>n</i> + 1 − log<sub>2</sub>(ln|<i>z</i><sub><i>n</i></sub>| / ln 2), περιορισμένη στο [<i>n</i>, <i>n</i>+1]. Στο πάνελ του επιλεγμένου σημείου αναφέρεται πάντα ο ακέραιος <i>n</i>.</li>
+          <li><b>Ύψος:</b> <i>h</i> = <i>F</i>(ν) / <i>F</i>(<i>N</i>) ∈ [0, 1], όπου <i>F</i>(<i>x</i>) = ln(1 + <i>x</i>) (λογαριθμική, προεπιλογή), √<i>x</i> ή <i>x</i> (γραμμική). Τα σημεία που δεν διέφυγαν σχηματίζουν ένα σκούρο πλατό σε <i>h</i> = 1,06 — ελαφρά πάνω από το μέγιστο των σημείων που διέφυγαν. Το ύψος στον χώρο είναι <i>h</i> × (ρύθμιση «Ύψος τοπίου»).</li>
+          <li><b>Χρώμα:</b> το ίδιο <i>h</i> χαρτογραφείται στην κλίμακα του υπομνήματος· μπλε = γρήγορη διαφυγή, κίτρινο/ροζ = αργή διαφυγή, δηλαδή κοντά στο σύνορο.</li>
+          <li><b>Όρια ακρίβειας:</b> οι υπολογισμοί γίνονται με αριθμούς διπλής ακρίβειας (double). Σε μεγέθυνση πολύ μεγαλύτερη από ~10¹² η εικόνα παύει να είναι αξιόπιστη.</li>
+          <li><b>Απόρρητο:</b> όλοι οι υπολογισμοί γίνονται στη συσκευή σας· δεν χρειάζεται διακομιστής, λογαριασμός ή κλειδί.</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+
+  <div class="colR">
+    <section class="card o2" id="selCard" aria-labelledby="hSel">
+      <h2 id="hSel">Επιλεγμένο σημείο</h2>
+      <div id="selEmpty" class="small" style="margin:0">Πατήστε (ή κάντε κλικ) σε ένα σημείο του γραφήματος, ή διαλέξτε ένα παράδειγμα, για να δείτε τι κάνει η τροχιά του.</div>
+      <div id="selBody" hidden aria-live="polite">
+        <div class="kv"><span>c = a + bi</span><b id="selC"></b></div>
+        <div class="kv"><span>Κατάσταση</span><b><span id="selStatus" class="badge"></span></b></div>
+        <div class="kv"><span>Επανάληψη διαφυγής</span><b id="selN"></b></div>
+        <p id="selExplain" style="font-size:.92rem"></p>
+        <p class="mono" id="selOrbit"></p>
+        <p class="small" id="selGridNote" style="margin-top:6px" hidden></p>
+      </div>
+      <div class="lead">Παραδείγματα σημείων:</div>
+      <div class="chips" id="examples"></div>
+      <div class="btnrow">
+        <button class="btn primary" id="zoomHere" type="button" disabled>Μεγέθυνση ×4 εδώ</button>
+      </div>
+      <p class="small" id="zoomNote" style="margin-top:8px"></p>
+    </section>
+
+    <section class="card o4" aria-labelledby="hCtl">
+      <h2 id="hCtl">Ρυθμίσεις</h2>
+      <div class="ctl">
+        <label for="iter">Όριο επαναλήψεων <i>N</i></label><output id="iterOut" for="iter">200</output>
+        <input id="iter" type="range" min="0" max="7" step="1" value="3" aria-describedby="iterHelp">
+        <p class="small" id="iterHelp">Περισσότερες επαναλήψεις = πιο ακριβές σύνορο, αλλά πιο αργός υπολογισμός.</p>
+      </div>
+      <div class="ctl">
+        <label for="res">Ανάλυση γραφήματος</label>
+        <select id="res">
+          <option value="100">Γρήγορη — 100×100 σημεία</option>
+          <option value="200" selected>Κανονική — 200×200 (προεπιλογή)</option>
+          <option value="320">Λεπτομερής — 320×320</option>
+          <option value="480">Υψηλή — 480×480</option>
+          <option value="640">Πολύ υψηλή — 640×640 (βαρύτερη)</option>
+        </select>
+        <p class="small">Αφορά το 3D πλέγμα. Η 2D εικόνα υπολογίζεται σε ανάλυση οθόνης.</p>
+      </div>
+      <div class="ctl">
+        <label for="scale">Κλίμακα ύψους</label>
+        <select id="scale">
+          <option value="0" selected>Λογαριθμική — ln(1+ν)</option>
+          <option value="1">Τετραγωνική ρίζα — √ν</option>
+          <option value="2">Γραμμική — ν</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label for="vs">Ύψος τοπίου</label><output id="vsOut" for="vs">100%</output>
+        <input id="vs" type="range" min="20" max="250" step="5" value="100">
+      </div>
+      <div class="btnrow">
+        <button class="btn" id="resetCam" type="button">Επαναφορά κάμερας</button>
+        <button class="btn" id="resetView" type="button">Επαναφορά περιοχής</button>
+      </div>
+    </section>
+
+    <section class="card legend o5" aria-labelledby="hLeg">
+      <h2 id="hLeg">Υπόμνημα</h2>
+      <div style="font-size:.88rem">Χρώμα και ύψος = χρόνος διαφυγής <i>n</i> (πόσο γρήγορα ξεπέρασε το 2 η τροχιά):</div>
+      <div class="ramp" id="ramp" role="img" aria-label="Κλίμακα χρώματος από μπλε (γρήγορη διαφυγή) έως ροζ (αργή διαφυγή)"></div>
+      <ul>
+        <li><span class="sw b"></span><span>δεν διέφυγε στις <b id="legN">200</b> επαναλήψεις — σκούρο πλατό στο μέγιστο ύψος</span></li>
+        <li><span class="sw p"></span><span>επιλεγμένο σημείο</span></li>
+      </ul>
+      <p class="small" id="legScale" style="margin-top:10px"></p>
+    </section>
+  </div>
+</main>
+<footer>Στατική σελίδα (HTML + JavaScript + WebGL). Τα σημεία υπολογίζονται στη συσκευή σας με Web Workers.</footer>
+
+<!-- Μαθηματικός πυρήνας: χρησιμοποιείται από την εφαρμογή, από τους Web Workers και από το tests/test-math.js -->
+<script id="core-src" type="text/plain">
+/*CORE-START*/
+var MB_PLATEAU = 1.06;
+
+// Γράφει στο out[0] το n (μικρότερο n >= 1, n <= maxIter, με |z_n| > 2) ή -1 αν δεν διέφυγε,
+// και στο out[1] την ομαλοποιημένη τιμή ν (μόνο για εμφάνιση) ή maxIter αν δεν διέφυγε.
+function mbEscapeSmooth(a, b, maxIter, out) {
+  var x = 0, y = 0;
+  for (var n = 1; n <= maxIter; n++) {
+    var t = x * x - y * y + a;
+    y = 2 * x * y + b;
+    x = t;
+    var r2 = x * x + y * y;
+    if (r2 > 4) {
+      var q = Math.log(r2) / (2 * Math.LN2);      // ln|z| / ln 2  (> 1)
+      var f = Math.log(q) / Math.LN2;               // log2(q)
+      if (!(f > 0)) f = 0; else if (f > 1) f = 1;
+      out[0] = n;
+      out[1] = n + 1 - f;                           // ν ∈ [n, n+1]
+      return n;
+    }
+  }
+  out[0] = -1;
+  out[1] = maxIter;
+  return -1;
+}
+
+var _mbTmp = new Float64Array(2);
+function mbEscape(a, b, maxIter) { return mbEscapeSmooth(a, b, maxIter, _mbTmp); }
+
+// mode: 0 = ln(1+x), 1 = sqrt(x), 2 = linear
+function mbHeight(nu, N, mode) {
+  var p;
+  if (mode === 1) p = Math.sqrt(nu) / Math.sqrt(N);
+  else if (mode === 2) p = nu / N;
+  else p = Math.log(1 + nu) / Math.log(1 + N);
+  return p < 0 ? 0 : (p > 1 ? 1 : p);
+}
+function mbInverseHeight(p, N, mode) {
+  if (mode === 1) return p * p * N;
+  if (mode === 2) return p * N;
+  return Math.exp(p * Math.log(1 + N)) - 1;
+}
+
+// z_0..z_count (σταματά μετά το πρώτο |z| > 2)
+function mbOrbit(a, b, count) {
+  var out = [[0, 0]], x = 0, y = 0;
+  for (var k = 1; k <= count; k++) {
+    var t = x * x - y * y + a;
+    y = 2 * x * y + b;
+    x = t;
+    out.push([x, y]);
+    if (x * x + y * y > 4) break;
+  }
+  return out;
+}
+
+// Ακριβής περιοδικότητα της (πεπερασμένης) τροχιάς, αν υπάρχει: {pre, period} ή null
+function mbCycle(orbit) {
+  var L = orbit.length;
+  for (var p = 1; p <= 8; p++) {
+    for (var k = 0; k <= 4; k++) {
+      if (L < k + p + 2) continue;
+      var ok = true;
+      for (var i = k; i + p < L; i++) {
+        if (orbit[i][0] !== orbit[i + p][0] || orbit[i][1] !== orbit[i + p][1]) { ok = false; break; }
+      }
+      if (ok) return { pre: k, period: p };
+    }
+  }
+  return null;
+}
+
+// Υπολογισμός ζώνης γραμμών του πλέγματος (το ίδιο στο worker και στο κύριο νήμα)
+function mbBand(m) {
+  var res = m.res, rows = m.rowEnd - m.rowStart;
+  var n = new Int32Array(rows * res), nu = new Float32Array(rows * res), out = new Float64Array(2);
+  for (var j = 0; j < rows; j++) {
+    var b = m.im0 + (m.rowStart + j) * m.step;
+    for (var i = 0; i < res; i++) {
+      var a = m.re0 + i * m.step;
+      mbEscapeSmooth(a, b, m.maxIter, out);
+      n[j * res + i] = out[0];
+      nu[j * res + i] = out[1];
+    }
+  }
+  return { jobId: m.jobId, rowStart: m.rowStart, rowEnd: m.rowEnd, n: n, nu: nu };
+}
+/*CORE-END*/
+</script>
+
+<script>
+(function () {
+'use strict';
+
+/* ================= Βοηθητικά ================= */
+var $ = function (id) { return document.getElementById(id); };
+var coreSrc = $('core-src').textContent;
+var core = new Function(coreSrc + '\nreturn {mbEscapeSmooth:mbEscapeSmooth,mbEscape:mbEscape,mbHeight:mbHeight,mbInverseHeight:mbInverseHeight,mbOrbit:mbOrbit,mbCycle:mbCycle,mbBand:mbBand,MB_PLATEAU:MB_PLATEAU};')();
+var PLATEAU = core.MB_PLATEAU;
+function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+var SUB = '₀₁₂₃₄₅₆₇₈₉';
+function sub(n) { return String(n).replace(/\d/g, function (d) { return SUB[+d]; }); }
+function fmt(x, d) {
+  if (!isFinite(x)) return x > 0 ? '∞' : (x < 0 ? '−∞' : 'NaN');
+  if (Math.abs(x) >= 1e6) return x.toExponential(2).replace('-', '−');
+  var s = x.toFixed(d);
+  if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  if (s === '-0') s = '0';
+  return s.replace('-', '−');
+}
+function fmtC(re, im, d) {
+  if (im === 0) return fmt(re, d);
+  if (re === 0) return fmt(im, d) + 'i';
+  return fmt(re, d) + (im < 0 ? ' − ' : ' + ') + fmt(Math.abs(im), d) + 'i';
+}
+function niceTicks(lo, hi, target) {
+  var range = hi - lo, raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+  var step = (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p, out = [];
+  for (var t = Math.ceil(lo / step - 1e-9) * step; t <= hi + 1e-9 * step; t += step) out.push(+t.toPrecision(12));
+  return { ticks: out, dec: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
+}
+
+/* ================= Κατάσταση ================= */
+var DEFAULT_VIEW = { cx: -0.5, cy: 0, half: 1.7 };
+var MIN_HALF = 2e-13;
+var ITER_STEPS = [50, 100, 150, 200, 300, 500, 1000, 2000];
+var state = { view: { cx: DEFAULT_VIEW.cx, cy: DEFAULT_VIEW.cy, half: DEFAULT_VIEW.half }, iterIdx: 3, res: 200, scale: 0, vscale: 100, mode: '3d', sel: null };
+function maxIter() { return ITER_STEPS[state.iterIdx]; }
+var S0 = 0.9; // ύψος σε μονάδες κόσμου για h = 1 όταν «Ύψος τοπίου» = 100%
+function S() { return S0 * state.vscale / 100; }
+
+var stage = $('stage'), glc = $('glc'), ovc = $('ovc'), flc = $('flc'), mini = $('mini');
+var W = 600, H = 400, dpr = 1;
+var g3 = null, g2 = null;      // τελευταία πλέγματα (3D και 2D)
+var mesh = null;               // δεδομένα 3D πλέγματος
+var gl = null, glState = null, glOk = false;
+
+/* ================= Χρώματα ================= */
+var STOPS = [[0, 13, 27, 76], [.18, 31, 95, 191], [.38, 25, 195, 201], [.58, 126, 224, 90], [.76, 255, 225, 77], [.9, 255, 138, 61], [1, 255, 61, 127]];
+var LUT = new Uint8Array(1024 * 3);
+(function () {
+  for (var i = 0; i < 1024; i++) {
+    var p = i / 1023, k = 0;
+    while (k < STOPS.length - 2 && p > STOPS[k + 1][0]) k++;
+    var a = STOPS[k], b = STOPS[k + 1], t = (p - a[0]) / (b[0] - a[0]);
+    for (var c = 0; c < 3; c++) LUT[i * 3 + c] = Math.round(a[c + 1] + (b[c + 1] - a[c + 1]) * t);
+  }
+})();
+var BND = [20, 16, 38];
+
+/* ================= Υπολογισμός με Web Workers ================= */
+var WORKER_SRC = coreSrc + '\nself.onmessage=function(e){var r=mbBand(e.data);self.postMessage(r,[r.n.buffer,r.nu.buffer]);};';
+var pool = { workers: [], jobs: [], nextId: 1 };
+
+function FakeWorker() {
+  var self = this; this.onmessage = null; this.busy = false;
+  this.postMessage = function (m) { setTimeout(function () { var r = core.mbBand(m); if (self.onmessage) self.onmessage({ data: r }); }, 0); };
+}
+function initPool() {
+  var hc = navigator.hardwareConcurrency || 2;
+  var count = Math.max(1, Math.min(4, hc - 1));
+  var url = null;
+  try { url = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' })); } catch (e) { url = null; }
+  for (var i = 0; i < count; i++) {
+    var w = null;
+    if (url) { try { w = new Worker(url); } catch (e) { w = null; } }
+    if (!w) w = new FakeWorker();
+    w.busy = false;
+    w.onmessage = onWorkerMessage.bind(null, w);
+    w.onerror = function (ev) { console.error('Σφάλμα worker', ev && ev.message); };
+    pool.workers.push(w);
+  }
+}
+function onWorkerMessage(w, e) {
+  w.busy = false;
+  var d = e.data, idx = -1;
+  for (var i = 0; i < pool.jobs.length; i++) if (pool.jobs[i].id === d.jobId) { idx = i; break; }
+  if (idx >= 0) {
+    var job = pool.jobs[idx];
+    job.n.set(d.n, d.rowStart * job.res);
+    job.nu.set(d.nu, d.rowStart * job.res);
+    job.done += d.rowEnd - d.rowStart;
+    if (job.onProgress) job.onProgress(job.done / job.res);
+    if (job.done >= job.res) {
+      pool.jobs.splice(idx, 1);
+      job.resolve({ kind: job.kind, res: job.res, maxIter: job.maxIter, view: job.view, n: job.n, nu: job.nu });
+    }
+  }
+  pump();
+}
+function pump() {
+  for (var wi = 0; wi < pool.workers.length; wi++) {
+    var w = pool.workers[wi];
+    if (w.busy) continue;
+    var job = null;
+    for (var i = 0; i < pool.jobs.length; i++) if (pool.jobs[i].queue.length) { job = pool.jobs[i]; break; }
+    if (!job) break;
+    var band = job.queue.shift();
+    w.busy = true;
+    w.postMessage({ jobId: job.id, res: job.res, re0: job.view.cx - job.view.half, im0: job.view.cy - job.view.half, step: job.step, maxIter: job.maxIter, rowStart: band[0], rowEnd: band[1] });
+  }
+}
+function computeGrid(kind, view, maxIt, res, onProgress) {
+  return new Promise(function (resolve) {
+    pool.jobs = pool.jobs.filter(function (j) { if (j.kind === kind) { j.resolve(null); return false; } return true; });
+    var band = Math.max(2, Math.round(res / 40)), queue = [];
+    for (var r = 0; r < res; r += band) queue.push([r, Math.min(res, r + band)]);
+    pool.jobs.push({
+      id: pool.nextId++, kind: kind, res: res, maxIter: maxIt, view: view, step: 2 * view.half / (res - 1), queue: queue, done: 0,
+      n: new Int32Array(res * res), nu: new Float32Array(res * res), resolve: resolve, onProgress: onProgress
+    });
+    pump();
+  });
+}
+
+/* ================= Πρόοδος ================= */
+var progTimer = 0, progActive = null;
+function progStart(kind) {
+  progActive = kind;
+  clearTimeout(progTimer);
+  progTimer = setTimeout(function () { if (progActive === (state.mode === '3d' ? '3d' : '2d')) $('prog').classList.add('on'); }, 120);
+  $('progFill').style.width = '0%';
+}
+function progUpdate(kind, f) {
+  if (kind !== progActive) return;
+  var pct = Math.round(f * 100);
+  $('progFill').style.width = pct + '%';
+  $('progTxt').textContent = 'Υπολογισμός… ' + pct + '%';
+}
+function progEnd(kind) {
+  if (kind !== progActive) return;
+  progActive = null; clearTimeout(progTimer);
+  $('prog').classList.remove('on');
+}
+
+/* ================= Πλέγματα: έλεγχος ισχύος και ζήτηση ================= */
+function res2dTarget() { return clamp(Math.round(Math.min(W, H) * dpr), 360, 800); }
+function gridOk(g, kind) {
+  if (!g) return false;
+  var v = state.view;
+  if (g.view.cx !== v.cx || g.view.cy !== v.cy || g.view.half !== v.half || g.maxIter !== maxIter()) return false;
+  if (kind === '3d') return g.res === state.res;
+  var t = res2dTarget();
+  return g.res >= t * 0.6 && g.res <= t * 2.5;
+}
+function ensure(kind) {
+  var cur = kind === '3d' ? g3 : g2;
+  if (gridOk(cur, kind)) return;
+  var res = kind === '3d' ? state.res : res2dTarget();
+  progStart(kind);
+  computeGrid(kind, { cx: state.view.cx, cy: state.view.cy, half: state.view.half }, maxIter(), res, function (f) { progUpdate(kind, f); }).then(function (g) {
+    if (!g) return;
+    progEnd(kind);
+    if (kind === '3d') { g3 = g; if (glOk) buildMesh(g); } else { g2 = g; }
+    updateInfo(); updateLegend(); if (state.sel) updateSelectionUI(); render();
+  });
+}
+var refreshTimer = 0;
+function refresh(now) {
+  clearTimeout(refreshTimer);
+  var go = function () { ensure(state.mode === '3d' ? '3d' : '2d'); };
+  if (now) go(); else refreshTimer = setTimeout(go, 140);
+}
+
+/* ================= Εικόνα 2D από πλέγμα ================= */
+function getImg(g) {
+  if (g._img && g._imgScale === state.scale) return g._img;
+  var R = g.res, c = g._img || document.createElement('canvas');
+  c.width = R; c.height = R;
+  var ctx = c.getContext('2d'), id = ctx.createImageData(R, R), px = id.data, N = g.maxIter, mode = state.scale;
+  for (var j = 0; j < R; j++) {
+    var row = R - 1 - j;
+    for (var i = 0; i < R; i++) {
+      var idx = j * R + i, o = (row * R + i) * 4;
+      if (g.n[idx] < 0) { px[o] = BND[0]; px[o + 1] = BND[1]; px[o + 2] = BND[2]; }
+      else { var k = Math.round(core.mbHeight(g.nu[idx], N, mode) * 1023) * 3; px[o] = LUT[k]; px[o + 1] = LUT[k + 1]; px[o + 2] = LUT[k + 2]; }
+      px[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  g._img = c; g._imgScale = state.scale;
+  return c;
+}
+
+/* ================= Πίνακες 4×4 ================= */
+function m4Persp(fovy, aspect, near, far) {
+  var f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+  return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
+}
+function v3sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+function v3cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+function v3dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function v3norm(a) { var l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+function m4LookAt(e, c, up) {
+  var z = v3norm(v3sub(e, c)), x = v3norm(v3cross(up, z)), y = v3cross(z, x);
+  return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3dot(x, e), -v3dot(y, e), -v3dot(z, e), 1]);
+}
+function m4Mul(a, b) {
+  var o = new Float32Array(16);
+  for (var c = 0; c < 4; c++) for (var r = 0; r < 4; r++) {
+    var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+    o[c * 4 + r] = s;
+  }
+  return o;
+}
+
+/* ================= Κάμερα ================= */
+var FOV = 40 * Math.PI / 180, TAN = Math.tan(FOV / 2);
+var cam = { yaw: -0.45, pitch: 0.62, dist: 4.2, tx: 0, ty: 0.3, tz: 0 };
+var VP = null;
+function resetCamera() {
+  var a = W / Math.max(H, 1);
+  cam.yaw = -0.5; cam.pitch = 0.74; cam.tx = 0; cam.ty = 0.12; cam.tz = 0.05;
+  cam.dist = clamp(Math.max(4.7, 4.9 / a), 2, 14);
+  render();
+}
+function camEye() {
+  var cp = Math.cos(cam.pitch);
+  return [cam.tx + cam.dist * cp * Math.sin(cam.yaw), cam.ty + cam.dist * Math.sin(cam.pitch), cam.tz + cam.dist * cp * Math.cos(cam.yaw)];
+}
+function camBasis() {
+  var e = camEye(), f = v3norm(v3sub([cam.tx, cam.ty, cam.tz], e)), r = v3norm(v3cross(f, [0, 1, 0])), u = v3cross(r, f);
+  return { e: e, f: f, r: r, u: u };
+}
+function computeVP() {
+  var e = camEye();
+  VP = m4Mul(m4Persp(FOV, W / H, 0.05, 60), m4LookAt(e, [cam.tx, cam.ty, cam.tz], [0, 1, 0]));
+  return VP;
+}
+function project(x, y, z) {
+  var m = VP, cx = m[0] * x + m[4] * y + m[8] * z + m[12], cy = m[1] * x + m[5] * y + m[9] * z + m[13], cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+  if (cw <= 1e-6) return null;
+  return [(cx / cw + 1) / 2 * W, (1 - cy / cw) / 2 * H];
+}
+
+/* ================= WebGL ================= */
+var VS = 'attribute vec3 aPos;attribute vec2 aGrad;attribute vec4 aCol;uniform mat4 uMVP;uniform float uS;varying vec3 vCol;varying vec3 vN;' +
+  'void main(){vec3 p=vec3(aPos.x,aPos.y*uS,aPos.z);gl_Position=uMVP*vec4(p,1.0);vN=normalize(vec3(-uS*aGrad.x,1.0,-uS*aGrad.y));vCol=aCol.rgb;}';
+var FS = 'precision mediump float;varying vec3 vCol;varying vec3 vN;uniform vec3 uL;' +
+  'void main(){vec3 n=normalize(vN);float d=max(dot(n,normalize(uL)),0.0);float lit=0.46+0.70*d;gl_FragColor=vec4(vCol*lit,1.0);}';
+
+function compile(type, src) {
+  var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error('Σφάλμα shader:', gl.getShaderInfoLog(s)); return null; }
+  return s;
+}
+function initGL() {
+  var opts = { alpha: true, antialias: true, premultipliedAlpha: true, depth: true, preserveDrawingBuffer: false };
+  try { gl = glc.getContext('webgl2', opts) || glc.getContext('webgl', opts) || glc.getContext('experimental-webgl', opts); } catch (e) { gl = null; }
+  if (!gl) return false;
+  var isGL2 = (typeof WebGL2RenderingContext !== 'undefined') && (gl instanceof WebGL2RenderingContext);
+  if (!isGL2 && !gl.getExtension('OES_element_index_uint')) return false;
+  var vs = compile(gl.VERTEX_SHADER, VS), fs = compile(gl.FRAGMENT_SHADER, FS);
+  if (!vs || !fs) return false;
+  var prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error('Σφάλμα σύνδεσης:', gl.getProgramInfoLog(prog)); return false; }
+  glState = {
+    prog: prog, aPos: gl.getAttribLocation(prog, 'aPos'), aGrad: gl.getAttribLocation(prog, 'aGrad'), aCol: gl.getAttribLocation(prog, 'aCol'),
+    uMVP: gl.getUniformLocation(prog, 'uMVP'), uS: gl.getUniformLocation(prog, 'uS'), uL: gl.getUniformLocation(prog, 'uL')
+  };
+  gl.enable(gl.DEPTH_TEST);
+  return true;
+}
+glc.addEventListener('webglcontextlost', function (e) { e.preventDefault(); mesh = null; });
+glc.addEventListener('webglcontextrestored', function () { if (initGL() && g3) buildMesh(g3); render(); });
+
+function buildMesh(g) {
+  var R = g.res, N = g.maxIter, mode = state.scale, nCell = R * R;
+  var h = new Float32Array(nCell), col = new Uint8Array(nCell * 4), pos = new Float32Array(nCell * 5);
+  for (var idx = 0; idx < nCell; idx++) {
+    var nv = g.n[idx], o = idx * 4;
+    if (nv < 0) { h[idx] = PLATEAU; col[o] = BND[0]; col[o + 1] = BND[1]; col[o + 2] = BND[2]; }
+    else {
+      var p = core.mbHeight(g.nu[idx], N, mode), k = Math.round(p * 1023) * 3;
+      h[idx] = p; col[o] = LUT[k]; col[o + 1] = LUT[k + 1]; col[o + 2] = LUT[k + 2];
+    }
+    col[o + 3] = 255;
+  }
+  var dx = 2 / (R - 1), GMAX = 15;
+  for (var j = 0; j < R; j++) {
+    var j0 = j > 0 ? j - 1 : j, j1 = j < R - 1 ? j + 1 : j;
+    for (var i = 0; i < R; i++) {
+      var i0 = i > 0 ? i - 1 : i, i1 = i < R - 1 ? i + 1 : i, q = j * R + i, o5 = q * 5;
+      var gx = (h[j * R + i1] - h[j * R + i0]) / ((i1 - i0) * dx);
+      var gz = -(h[j1 * R + i] - h[j0 * R + i]) / ((j1 - j0) * dx);
+      pos[o5] = -1 + 2 * i / (R - 1); pos[o5 + 1] = h[q]; pos[o5 + 2] = 1 - 2 * j / (R - 1);
+      pos[o5 + 3] = clamp(gx, -GMAX, GMAX); pos[o5 + 4] = clamp(gz, -GMAX, GMAX);
+    }
+  }
+  var idxArr = new Uint32Array((R - 1) * (R - 1) * 6), t = 0;
+  for (var jj = 0; jj < R - 1; jj++) for (var ii = 0; ii < R - 1; ii++) {
+    var a = jj * R + ii, b = a + 1, c = a + R, d = c + 1;
+    idxArr[t++] = a; idxArr[t++] = c; idxArr[t++] = b; idxArr[t++] = b; idxArr[t++] = c; idxArr[t++] = d;
+  }
+  if (mesh) { gl.deleteBuffer(mesh.vbo); gl.deleteBuffer(mesh.cbo); gl.deleteBuffer(mesh.ibo); }
+  var vbo = gl.createBuffer(), cbo = gl.createBuffer(), ibo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cbo); gl.bufferData(gl.ARRAY_BUFFER, col, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxArr, gl.STATIC_DRAW);
+  mesh = { res: R, h: h, grid: g, view: g.view, maxIter: N, scale: mode, vbo: vbo, cbo: cbo, ibo: ibo, count: idxArr.length };
+}
+
+function heightAt(x, z) {
+  var R = mesh.res, hh = mesh.h;
+  var u = clamp((x + 1) / 2 * (R - 1), 0, R - 1), v = clamp((1 - z) / 2 * (R - 1), 0, R - 1);
+  var i0 = Math.min(R - 2, Math.floor(u)), j0 = Math.min(R - 2, Math.floor(v)), fu = u - i0, fv = v - j0;
+  var a = hh[j0 * R + i0], b = hh[j0 * R + i0 + 1], c = hh[(j0 + 1) * R + i0], d = hh[(j0 + 1) * R + i0 + 1];
+  return (a * (1 - fu) + b * fu) * (1 - fv) + (c * (1 - fu) + d * fu) * fv;
+}
+
+function draw3D() {
+  if (!glOk) return;
+  gl.viewport(0, 0, glc.width, glc.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  computeVP();
+  if (!mesh) return;
+  var s = glState;
+  gl.useProgram(s.prog);
+  gl.uniformMatrix4fv(s.uMVP, false, VP);
+  gl.uniform1f(s.uS, S());
+  gl.uniform3f(s.uL, -0.45, 0.85, 0.5);
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
+  gl.enableVertexAttribArray(s.aPos); gl.vertexAttribPointer(s.aPos, 3, gl.FLOAT, false, 20, 0);
+  gl.enableVertexAttribArray(s.aGrad); gl.vertexAttribPointer(s.aGrad, 2, gl.FLOAT, false, 20, 12);
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.cbo);
+  gl.enableVertexAttribArray(s.aCol); gl.vertexAttribPointer(s.aCol, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
+  gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+}
+
+/* ================= Επικάλυψη 3D: άξονες, ετικέτες, καρφίτσα ================= */
+var ovx = ovc.getContext('2d'), flx = flc.getContext('2d'), mnx = mini.getContext('2d');
+function label(ctx, txt, x, y, align, size, color, noClamp) {
+  ctx.font = '600 ' + (size || 11) + 'px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+  ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+  if (!noClamp) {
+    var w = ctx.measureText(txt).width, l = align === 'right' ? x - w : (align === 'left' ? x : x - w / 2);
+    if (l < 4) x += 4 - l; else if (l + w > W - 4) x -= (l + w) - (W - 4);
+  }
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,26,.88)'; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = color || 'rgba(235,240,255,.96)'; ctx.fillText(txt, x, y);
+}
+// Τίτλος άξονα γραμμένος κατά μήκος της ακμής (σε οθόνη), μετατοπισμένος προς τα έξω
+function edgeTitle(ctx, txt, A, B, mid, center, dist, size, color) {
+  if (!A || !B || !mid || !center) return;
+  var dx = B[0] - A[0], dy = B[1] - A[1], len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+  if (nx * (mid[0] - center[0]) + ny * (mid[1] - center[1]) < 0) { nx = -nx; ny = -ny; }
+  var x = clamp(mid[0] + nx * dist, 30, W - 30), y = clamp(mid[1] + ny * dist, 14, H - 14), ang = Math.atan2(dy, dx);
+  if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); label(ctx, txt, 0, 0, 'center', size, color, true); ctx.restore();
+}
+function line(ctx, a, b) { if (!a || !b) return; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+
+function selPin(view) {
+  if (!state.sel) return null;
+  var x = (state.sel.re - view.cx) / view.half, z = -(state.sel.im - view.cy) / view.half;
+  if (Math.abs(x) > 1 || Math.abs(z) > 1) return null;
+  return { x: x, z: z };
+}
+
+function drawOverlay() {
+  ovx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ovx.clearRect(0, 0, W, H);
+  if (state.mode !== '3d' || !mesh || !VP) return;
+  var view = mesh.view, N = mesh.maxIter, s = S(), small = W < 520, fs = small ? 10 : 11;
+  var e = camEye(), xe = e[0] >= 0 ? 1 : -1, ze = e[2] >= 0 ? 1 : -1;
+  var P = function (x, y, z) { return project(x, y, z); };
+  ovx.lineWidth = 1.2; ovx.strokeStyle = 'rgba(255,255,255,.4)';
+  ovx.beginPath();
+  var cs = [[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]];
+  for (var i = 0; i < cs.length; i++) { var q = P(cs[i][0], 0, cs[i][1]); if (!q) continue; if (i === 0) ovx.moveTo(q[0], q[1]); else ovx.lineTo(q[0], q[1]); }
+  ovx.stroke();
+
+  // άξονας Re(c) πάνω στην πλησιέστερη ακμή z = ze
+  var re0 = view.cx - view.half, re1 = view.cx + view.half, im0 = view.cy - view.half, im1 = view.cy + view.half;
+  var tk = niceTicks(re0, re1, small ? 4 : 6);
+  ovx.strokeStyle = 'rgba(255,255,255,.55)';
+  tk.ticks.forEach(function (t) {
+    var x = (t - view.cx) / view.half;
+    line(ovx, P(x, 0, ze), P(x, 0, ze * 1.05));
+    var q = P(x, 0, ze * 1.14); if (q) label(ovx, fmt(t, tk.dec), q[0], q[1], 'center', fs);
+  });
+  var cen = P(0, 0, 0), dTitle = small ? 36 : 56;
+  edgeTitle(ovx, small ? 'Re(c) — πραγματικό' : 'Re(c) — πραγματικό μέρος', P(-1, 0, ze), P(1, 0, ze), P(0, 0, ze), cen, dTitle, fs + 1, '#9ff3e4');
+  // άξονας Im(c) πάνω στην πλησιέστερη ακμή x = xe
+  tk = niceTicks(im0, im1, small ? 4 : 6);
+  tk.ticks.forEach(function (t) {
+    var z = -(t - view.cy) / view.half;
+    line(ovx, P(xe, 0, z), P(xe * 1.05, 0, z));
+    var q = P(xe * 1.16, 0, z); if (q) label(ovx, fmt(t, tk.dec), q[0], q[1], 'center', fs);
+  });
+  edgeTitle(ovx, small ? 'Im(c) — φανταστικό' : 'Im(c) — φανταστικό μέρος', P(xe, 0, -1), P(xe, 0, 1), P(xe, 0, 0), cen, dTitle, fs + 1, '#ffb3cd');
+  // κατακόρυφος άξονας (ύψος): χρόνος διαφυγής
+  var top = s * PLATEAU, ax = -xe, az = -ze, side = -xe;
+  ovx.strokeStyle = 'rgba(255,255,255,.7)'; ovx.lineWidth = 1.6;
+  line(ovx, P(ax, 0, az), P(ax, top, az));
+  var mode = mesh.scale, levels = [0, 0.5, 1];
+  levels.forEach(function (p) {
+    var y = s * p, a = P(ax, y, az); if (!a) return;
+    var txt = p === 0 ? '0' : (p === 1 ? 'n = N = ' + N : 'n ≈ ' + Math.round(core.mbInverseHeight(p, N, mode)));
+    var b = P(ax + side * 0.05, y, az);
+    line(ovx, a, b);
+    label(ovx, txt, a[0] + (side < 0 ? -8 : 8), a[1], side < 0 ? 'right' : 'left', fs);
+  });
+  var tp = P(ax, top, az);
+  if (tp) {
+    line(ovx, tp, P(ax - side * 0.05, top, az));
+    label(ovx, 'δεν διέφυγε', tp[0] + (side < 0 ? 8 : -8), tp[1] - 2, side < 0 ? 'left' : 'right', fs, '#cfd7f2');
+    label(ovx, small ? 'Ύψος = n' : 'Ύψος = χρόνος διαφυγής n', tp[0], tp[1] - 18, 'center', fs + 1, '#ffe08a');
+  }
+  // καρφίτσα επιλεγμένου σημείου
+  var pin = selPin(view);
+  if (pin) {
+    var y = s * heightAt(pin.x, pin.z), base = P(pin.x, 0, pin.z), tip = P(pin.x, y, pin.z);
+    if (base && tip) {
+      ovx.lineWidth = 3; ovx.strokeStyle = 'rgba(0,0,0,.7)'; line(ovx, base, tip);
+      ovx.lineWidth = 1.4; ovx.strokeStyle = '#fff'; line(ovx, base, tip);
+      ovx.beginPath(); ovx.arc(tip[0], tip[1], 7, 0, 6.2832); ovx.lineWidth = 4; ovx.strokeStyle = '#000'; ovx.stroke();
+      ovx.lineWidth = 2.2; ovx.strokeStyle = '#fff'; ovx.stroke();
+      ovx.beginPath(); ovx.arc(tip[0], tip[1], 2.2, 0, 6.2832); ovx.fillStyle = '#fff'; ovx.fill();
+    }
+  }
+}
+
+/* ================= 2D προβολή ================= */
+function flatRect() {
+  var ml = W < 520 ? 42 : 56, mb = W < 520 ? 40 : 48, mt = 12, mr = 12;
+  var size = Math.max(60, Math.min(W - ml - mr, H - mt - mb));
+  return { x: ml + (W - ml - mr - size) / 2, y: mt + (H - mt - mb - size) / 2, size: size };
+}
+function flatGrid() {
+  if (g2 && gridOk(g2, '2d')) return g2;
+  return g2 || g3;
+}
+function drawMarker(ctx, x, y) {
+  ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.2832); ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.stroke();
+  ctx.lineWidth = 2.2; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 2, 0, 6.2832); ctx.fillStyle = '#fff'; ctx.fill();
+}
+function drawFlat() {
+  flx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  flx.clearRect(0, 0, W, H);
+  var g = flatGrid(); if (!g) return;
+  var r = flatRect(), v = g.view, small = W < 520, fs = small ? 10 : 11;
+  flx.imageSmoothingEnabled = true; flx.imageSmoothingQuality = 'high';
+  flx.drawImage(getImg(g), r.x, r.y, r.size, r.size);
+  flx.lineWidth = 1; flx.strokeStyle = 'rgba(255,255,255,.5)'; flx.strokeRect(r.x - .5, r.y - .5, r.size + 1, r.size + 1);
+  var re0 = v.cx - v.half, re1 = v.cx + v.half, im0 = v.cy - v.half, im1 = v.cy + v.half;
+  var tk = niceTicks(re0, re1, small ? 4 : 7);
+  tk.ticks.forEach(function (t) {
+    var x = r.x + (t - re0) / (re1 - re0) * r.size;
+    flx.beginPath(); flx.moveTo(x, r.y + r.size); flx.lineTo(x, r.y + r.size + 5); flx.stroke();
+    label(flx, fmt(t, tk.dec), x, r.y + r.size + 16, 'center', fs);
+  });
+  label(flx, small ? 'Re(c) — πραγματικό' : 'Re(c) — πραγματικό μέρος', r.x + r.size / 2, r.y + r.size + (small ? 31 : 34), 'center', fs + 1, '#9ff3e4');
+  tk = niceTicks(im0, im1, small ? 4 : 7);
+  tk.ticks.forEach(function (t) {
+    var y = r.y + (1 - (t - im0) / (im1 - im0)) * r.size;
+    flx.beginPath(); flx.moveTo(r.x - 5, y); flx.lineTo(r.x, y); flx.stroke();
+    label(flx, fmt(t, tk.dec), r.x - 8, y, 'right', fs);
+  });
+  flx.save(); flx.translate(small ? 11 : 13, r.y + r.size / 2); flx.rotate(-Math.PI / 2);
+  label(flx, small ? 'Im(c) — φανταστικό' : 'Im(c) — φανταστικό μέρος', 0, 0, 'center', fs + 1, '#ffb3cd', true); flx.restore();
+  if (state.sel) {
+    var u = (state.sel.re - re0) / (re1 - re0), w = (state.sel.im - im0) / (im1 - im0);
+    if (u >= 0 && u <= 1 && w >= 0 && w <= 1) drawMarker(flx, r.x + u * r.size, r.y + (1 - w) * r.size);
+  }
+}
+function drawMini() {
+  if (state.mode !== '3d') return;
+  var cw = mini.clientWidth || 104;
+  if (mini.width !== Math.round(cw * dpr)) { mini.width = Math.round(cw * dpr); mini.height = Math.round(cw * dpr); }
+  mnx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mnx.clearRect(0, 0, cw, cw);
+  var g = g3; if (!g) return;
+  mnx.imageSmoothingEnabled = true;
+  mnx.drawImage(getImg(g), 0, 0, cw, cw);
+  mnx.fillStyle = 'rgba(8,12,26,.78)'; mnx.fillRect(cw - 26, 0, 26, 16);
+  mnx.font = '600 10px system-ui,Arial,sans-serif'; mnx.textAlign = 'center'; mnx.textBaseline = 'middle'; mnx.fillStyle = '#e8edff'; mnx.fillText('2D', cw - 13, 8.5);
+  if (state.sel) {
+    var v = g.view, u = (state.sel.re - (v.cx - v.half)) / (2 * v.half), w = (state.sel.im - (v.cy - v.half)) / (2 * v.half);
+    if (u >= 0 && u <= 1 && w >= 0 && w <= 1) {
+      mnx.beginPath(); mnx.arc(u * cw, (1 - w) * cw, 4.5, 0, 6.2832); mnx.lineWidth = 3; mnx.strokeStyle = '#000'; mnx.stroke();
+      mnx.lineWidth = 1.6; mnx.strokeStyle = '#fff'; mnx.stroke();
+    }
+  }
+}
+
+/* ================= Σχεδίαση ================= */
+var raf = 0;
+function render() {
+  if (raf) return;
+  raf = requestAnimationFrame(function () {
+    raf = 0;
+    if (state.mode === '3d') { draw3D(); drawOverlay(); drawMini(); } else drawFlat();
+  });
+}
+function resize() {
+  var r = stage.getBoundingClientRect();
+  W = Math.max(50, r.width); H = Math.max(50, r.height); dpr = Math.min(window.devicePixelRatio || 1, 2);
+  [glc, ovc, flc].forEach(function (c) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); });
+  render();
+}
+
+/* ================= Επιλογή σημείου ================= */
+function digitsForView() { return clamp(Math.ceil(-Math.log10(state.view.half)) + 4, 4, 15); }
+function analyze(re, im) {
+  var N = maxIter(), out = new Float64Array(2);
+  core.mbEscapeSmooth(re, im, N, out);
+  var info = { re: re, im: im, N: N, escaped: out[0] > 0, n: out[0] };
+  var orbit = core.mbOrbit(re, im, info.escaped ? Math.min(info.n, 7) : 7);
+  info.orbit = orbit;
+  if (info.escaped) { var z = core.mbOrbit(re, im, info.n); var l = z[z.length - 1]; info.zn = Math.hypot(l[0], l[1]); }
+  info.cycle = info.escaped ? null : core.mbCycle(core.mbOrbit(re, im, 12));
+  return info;
+}
+function statusText(info) {
+  return info.escaped ? 'διέφυγε στην επανάληψη ' + info.n : 'δεν διέφυγε στις ' + info.N + ' επαναλήψεις';
+}
+function selectC(re, im) {
+  var info = analyze(re, im);
+  state.sel = { re: re, im: im, info: info };
+  updateSelectionUI();
+  render();
+}
+function updateSelectionUI() {
+  var s = state.sel;
+  $('zoomHere').disabled = !s || state.view.half / 4 < MIN_HALF;
+  if (!s) { $('selEmpty').hidden = false; $('selBody').hidden = true; $('chip').classList.remove('on'); return; }
+  var info = s.info, d = digitsForView(), dd = Math.max(d, 4);
+  $('selEmpty').hidden = true; $('selBody').hidden = false;
+  $('selC').textContent = fmtC(s.re, s.im, dd);
+  var st = $('selStatus'); st.textContent = statusText(info); st.className = 'badge ' + (info.escaped ? 'esc' : 'bnd');
+  $('selN').textContent = info.escaped ? String(info.n) : '— (δεν διέφυγε στις ' + info.N + ')';
+  var ex;
+  if (info.escaped) {
+    ex = 'Η τροχιά z₀ = 0, zₙ₊₁ = zₙ² + c ξεπέρασε απόσταση 2 από το 0 στο βήμα n = ' + info.n + ' (|z' + sub(info.n) + '| ≈ ' + fmt(info.zn, 3) + '). ' +
+      'Από εκεί και πέρα η τροχιά απομακρύνεται αναπόφευκτα στο άπειρο, άρα αυτό το c δεν ανήκει στο σύνολο Mandelbrot. ' +
+      'Το ύψος στο γράφημα δείχνει πόσο αργά έγινε αυτό: πιο ψηλά σημαίνει συνήθως πιο κοντά στο σύνορο του συνόλου.';
+  } else {
+    ex = 'Η τροχιά έμεινε μέσα στον δίσκο |z| ≤ 2 σε όλα τα N = ' + info.N + ' βήματα που υπολογίστηκαν. ' +
+      'Αυτό ΔΕΝ αποδεικνύει ότι το c ανήκει στο σύνολο Mandelbrot: ένας πεπερασμένος υπολογισμός δεν αρκεί, και με περισσότερες επαναλήψεις ένα σημείο κοντά στο σύνορο μπορεί ακόμη να διαφύγει.';
+    if (info.cycle) {
+      var c = info.cycle, o = info.orbit;
+      ex += ' Εδώ η τροχιά επαναλαμβάνεται ακριβώς ' + (c.period === 1 ? '(σταθερό σημείο)' : 'κάθε ' + c.period + ' βήματα (κύκλος περιόδου ' + c.period + ')') + ' στον υπολογισμό μας.';
+    }
+  }
+  $('selExplain').textContent = ex;
+  var parts = info.orbit.map(function (z, k) { return 'z' + sub(k) + ' = ' + fmtC(z[0], z[1], 4); });
+  var txt = 'Τροχιά: ' + parts.join(', ');
+  txt += info.escaped ? '  (|z' + sub(info.n) + '| > 2)' : ', …';
+  $('selOrbit').textContent = txt;
+  // Το γράφημα είναι δειγματοληψία πλέγματος: προειδοποίηση αν το πλησιέστερο δείγμα διαφωνεί με το ακριβές c
+  var gn = $('selGridNote'), g = state.mode === '3d' ? g3 : flatGrid(); gn.hidden = true;
+  if (g) {
+    var v = g.view, st2 = 2 * v.half / (g.res - 1);
+    var gi = Math.round((s.re - (v.cx - v.half)) / st2), gj = Math.round((s.im - (v.cy - v.half)) / st2);
+    if (gi >= 0 && gj >= 0 && gi < g.res && gj < g.res && g.maxIter === info.N && (g.n[gj * g.res + gi] > 0) !== info.escaped) {
+      gn.textContent = 'Σημείωση: το πλησιέστερο δείγμα του πλέγματος (' + g.res + '×' + g.res + ') έχει διαφορετική κατάσταση από το ακριβές c — κοντά στο σύνορο το γράφημα είναι προσέγγιση. Αυξήστε την ανάλυση ή μεγεθύνετε.';
+      gn.hidden = false;
+    }
+  }
+  var chip = $('chip');
+  chip.innerHTML = '<span class="dot" style="background:' + (info.escaped ? '#ff5c93' : '#5eead4') + '"></span>c = ' + fmtC(s.re, s.im, Math.min(dd, 6)) + ' · ' + statusText(info);
+  chip.classList.add('on');
+}
+
+/* ================= Πληροφορίες, υπόμνημα ================= */
+function zoomFactor() { return DEFAULT_VIEW.half / state.view.half; }
+function fmtFactor(f) { return f >= 1e6 ? f.toExponential(1).replace('e+', '·10^') : (Math.round(f * 100) / 100).toLocaleString('el-GR'); }
+function updateInfo() {
+  var g = state.mode === '3d' ? g3 : flatGrid();
+  if (!g) { $('viewInfo').textContent = 'Υπολογισμός…'; return; }
+  var v = g.view, d = clamp(Math.ceil(-Math.log10(v.half)) + 2, 2, 14);
+  $('viewInfo').textContent = 'Re ∈ [' + fmt(v.cx - v.half, d) + ', ' + fmt(v.cx + v.half, d) + '] · Im ∈ [' + fmt(v.cy - v.half, d) + ', ' + fmt(v.cy + v.half, d) + '] · N = ' + g.maxIter + ' · πλέγμα ' + g.res + '×' + g.res + ' · μεγέθυνση ×' + fmtFactor(DEFAULT_VIEW.half / v.half);
+  var zn = $('zoomNote'), f = zoomFactor();
+  if (state.view.half / 4 < MIN_HALF) zn.textContent = 'Έχει φτάσει το όριο ακρίβειας των αριθμών διπλής ακρίβειας· περαιτέρω μεγέθυνση δεν είναι αξιόπιστη.';
+  else if (f >= 16 && maxIter() < 500) zn.textContent = 'Μετά από μεγέθυνση χρειάζονται συνήθως περισσότερες επαναλήψεις για να φανεί λεπτομέρεια: αυξήστε το όριο επαναλήψεων N.';
+  else zn.textContent = '';
+}
+function updateLegend() {
+  var N = maxIter(), mode = state.scale;
+  $('legN').textContent = N;
+  var ramp = $('ramp');
+  ramp.style.background = 'linear-gradient(90deg,' + STOPS.map(function (s) { return 'rgb(' + s[1] + ',' + s[2] + ',' + s[3] + ') ' + (s[0] * 100) + '%'; }).join(',') + ')';
+  ramp.innerHTML = '';
+  [0, 0.25, 0.5, 0.75, 1].forEach(function (p) {
+    var sp = document.createElement('span'); sp.className = 't'; sp.style.left = (p * 100) + '%';
+    var n = core.mbInverseHeight(p, N, mode);
+    sp.textContent = p === 0 ? 'n = 0' : (p === 1 ? 'n = ' + N : String(Math.round(n)));
+    ramp.appendChild(sp);
+  });
+  var f = ['h = ln(1+ν) / ln(1+N)', 'h = √ν / √N', 'h = ν / N'][mode];
+  $('legScale').textContent = 'Κλίμακα ύψους: ' + f + ', όπου ν η (ομαλοποιημένη) επανάληψη διαφυγής. Πλατό σε h = 1,06.';
+}
+
+/* ================= Επιλογή με πάτημα ================= */
+function pickAt(px, py) {
+  if (!mesh || !VP) return null;
+  var b = camBasis(), e = b.e, a = W / H, nx = px / W * 2 - 1, ny = 1 - py / H * 2;
+  var d = v3norm([b.f[0] + b.r[0] * nx * TAN * a + b.u[0] * ny * TAN, b.f[1] + b.r[1] * nx * TAN * a + b.u[1] * ny * TAN, b.f[2] + b.r[2] * nx * TAN * a + b.u[2] * ny * TAN]);
+  var s = S(), lo = [-1, 0, -1], hi = [1, s * PLATEAU + 1e-3, 1], t0 = 0, t1 = 1e9;
+  for (var k = 0; k < 3; k++) {
+    if (Math.abs(d[k]) < 1e-9) { if (e[k] < lo[k] || e[k] > hi[k]) return null; }
+    else {
+      var ta = (lo[k] - e[k]) / d[k], tb = (hi[k] - e[k]) / d[k];
+      if (ta > tb) { var tmp = ta; ta = tb; tb = tmp; }
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) return null;
+    }
+  }
+  var R = mesh.res, dt = 0.6 / (R - 1);
+  var above = function (t) { var x = e[0] + d[0] * t, y = e[1] + d[1] * t, z = e[2] + d[2] * t; return y - s * heightAt(x, z); };
+  var tt = -1, prev = t0;
+  if (above(t0) > 0) {
+    for (var t = t0 + dt; t <= t1 + dt; t += dt) {
+      var tc = Math.min(t, t1);
+      if (above(tc) <= 0) {
+        var l = prev, h2 = tc;
+        for (var it = 0; it < 14; it++) { var mid = (l + h2) / 2; if (above(mid) > 0) l = mid; else h2 = mid; }
+        tt = h2; break;
+      }
+      prev = tc;
+      if (tc >= t1) break;
+    }
+  }
+  if (tt < 0) return null;
+  return { x: e[0] + d[0] * tt, z: e[2] + d[2] * tt };
+}
+function selectFrom3D(px, py) {
+  var p = pickAt(px, py); if (!p) return;
+  var v = mesh.view;
+  selectC(v.cx + p.x * v.half, v.cy - p.z * v.half);
+}
+function selectFrom2D(px, py) {
+  var g = flatGrid(); if (!g) return;
+  var r = flatRect(), u = (px - r.x) / r.size, w = (py - r.y) / r.size;
+  if (u < 0 || u > 1 || w < 0 || w > 1) return;
+  var v = g.view;
+  selectC(v.cx - v.half + u * 2 * v.half, v.cy + v.half - w * 2 * v.half);
+}
+function selectFromMini(px, py) {
+  var g = g3; if (!g) return;
+  var cw = mini.clientWidth, u = px / cw, w = py / cw, v = g.view;
+  selectC(v.cx - v.half + u * 2 * v.half, v.cy + v.half - w * 2 * v.half);
+}
+
+/* ================= Χειρισμός αφής και ποντικιού ================= */
+var ptrs = new Map(), gesture = null, hintHidden = false;
+function hideHint() { if (hintHidden) return; hintHidden = true; setTimeout(function () { $('hint').classList.add('hide'); }, 2500); }
+function localXY(e, el) { var r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function panBy(dx, dy) {
+  var b = camBasis(), k = 2 * cam.dist * TAN / H;
+  cam.tx = clamp(cam.tx - b.r[0] * dx * k + b.u[0] * dy * k, -1.8, 1.8);
+  cam.ty = clamp(cam.ty - b.r[1] * dx * k + b.u[1] * dy * k, -0.3, 1.6);
+  cam.tz = clamp(cam.tz - b.r[2] * dx * k + b.u[2] * dy * k, -1.8, 1.8);
+}
+function rotateBy(dx, dy) {
+  cam.yaw -= dx * 0.0065;
+  cam.pitch = clamp(cam.pitch + dy * 0.0065, 0.05, 1.5);
+}
+function zoomBy(f) { cam.dist = clamp(cam.dist * f, 0.8, 14); }
+
+ovc.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+ovc.addEventListener('pointerdown', function (e) {
+  ovc.focus({ preventScroll: true });
+  try { ovc.setPointerCapture(e.pointerId); } catch (err) { }
+  var p = localXY(e, ovc);
+  ptrs.set(e.pointerId, { x: p[0], y: p[1], sx: p[0], sy: p[1], t: performance.now(), button: e.button, shift: e.shiftKey || e.ctrlKey || e.metaKey });
+  gesture = { moved: ptrs.size > 1, startCount: ptrs.size };
+  if (ptrs.size === 2) { var a = Array.from(ptrs.values()); gesture.dist = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); gesture.mx = (a[0].x + a[1].x) / 2; gesture.my = (a[0].y + a[1].y) / 2; }
+  hideHint();
+});
+ovc.addEventListener('pointermove', function (e) {
+  var pt = ptrs.get(e.pointerId); if (!pt) return;
+  var p = localXY(e, ovc), dx = p[0] - pt.x, dy = p[1] - pt.y;
+  if (Math.hypot(p[0] - pt.sx, p[1] - pt.sy) > 6) gesture.moved = true;
+  pt.x = p[0]; pt.y = p[1];
+  if (ptrs.size === 1) {
+    if (!gesture.moved) return;
+    var pan = pt.button === 2 || pt.button === 1 || pt.shift || (e.buttons & 6);
+    if (pan) panBy(dx, dy); else rotateBy(dx, dy);
+  } else if (ptrs.size === 2) {
+    var a = Array.from(ptrs.values()), dist = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), mx = (a[0].x + a[1].x) / 2, my = (a[0].y + a[1].y) / 2;
+    if (gesture.dist > 0) zoomBy(gesture.dist / dist);
+    panBy(mx - gesture.mx, my - gesture.my);
+    gesture.dist = dist; gesture.mx = mx; gesture.my = my; gesture.moved = true;
+  }
+  render();
+});
+function endPtr(e) {
+  var pt = ptrs.get(e.pointerId); if (!pt) return;
+  var wasTap = ptrs.size === 1 && gesture && !gesture.moved && gesture.startCount === 1 && (performance.now() - pt.t) < 600 && pt.button === 0 && !pt.shift && e.type === 'pointerup';
+  ptrs.delete(e.pointerId);
+  if (wasTap) selectFrom3D(pt.sx, pt.sy);
+  if (ptrs.size === 1) { gesture.dist = 0; var rest = Array.from(ptrs.values())[0]; rest.sx = rest.x; rest.sy = rest.y; gesture.moved = true; }
+}
+ovc.addEventListener('pointerup', endPtr);
+ovc.addEventListener('pointercancel', endPtr);
+ovc.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  var unit = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? 400 : 1);
+  zoomBy(Math.exp(e.deltaY * unit * 0.0013));
+  hideHint(); render();
+}, { passive: false });
+ovc.addEventListener('keydown', function (e) {
+  var used = true;
+  if (e.key === 'ArrowLeft') cam.yaw += 0.08;
+  else if (e.key === 'ArrowRight') cam.yaw -= 0.08;
+  else if (e.key === 'ArrowUp') cam.pitch = clamp(cam.pitch + 0.06, 0.05, 1.5);
+  else if (e.key === 'ArrowDown') cam.pitch = clamp(cam.pitch - 0.06, 0.05, 1.5);
+  else if (e.key === '+' || e.key === '=') zoomBy(0.88);
+  else if (e.key === '-' || e.key === '_') zoomBy(1.14);
+  else if (e.key === 'r' || e.key === 'R') resetCamera();
+  else used = false;
+  if (used) { e.preventDefault(); render(); }
+});
+flc.addEventListener('pointerdown', function (e) { var p = localXY(e, flc); selectFrom2D(p[0], p[1]); });
+mini.addEventListener('pointerdown', function (e) { e.stopPropagation(); var p = localXY(e, mini); selectFromMini(p[0], p[1]); });
+$('chip').addEventListener('click', function () { $('selCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+
+/* ================= Λειτουργίες και στοιχεία ελέγχου ================= */
+function setMode(m) {
+  if (m === '3d' && !glOk) m = '2d';
+  state.mode = m;
+  stage.classList.toggle('is3d', m === '3d'); stage.classList.toggle('is2d', m === '2d');
+  $('tab3d').setAttribute('aria-pressed', m === '3d'); $('tab2d').setAttribute('aria-pressed', m === '2d');
+  $('prog').classList.remove('on');
+  ensure(m === '3d' ? '3d' : '2d');
+  updateInfo(); render();
+}
+function showMsg(t) { var m = $('msg'); m.textContent = t; m.classList.add('on'); }
+function zoomHere() {
+  var s = state.sel; if (!s) return;
+  var half = state.view.half / 4;
+  if (half < MIN_HALF) { updateInfo(); return; }
+  state.view = { cx: s.re, cy: s.im, half: half };
+  updateSelectionUI(); updateInfo(); refresh(true);
+}
+function resetView() {
+  state.view = { cx: DEFAULT_VIEW.cx, cy: DEFAULT_VIEW.cy, half: DEFAULT_VIEW.half };
+  if (state.sel) state.sel.info = analyze(state.sel.re, state.sel.im);
+  updateSelectionUI(); updateInfo(); refresh(true);
+}
+function onIterChange() {
+  state.iterIdx = +$('iter').value; $('iterOut').textContent = maxIter();
+  if (state.sel) { state.sel.info = analyze(state.sel.re, state.sel.im); updateSelectionUI(); }
+  updateLegend(); updateInfo(); refresh(false);
+}
+function bindUI() {
+  $('tab3d').addEventListener('click', function () { setMode('3d'); });
+  $('tab2d').addEventListener('click', function () { setMode('2d'); });
+  $('iter').addEventListener('input', onIterChange);
+  $('res').addEventListener('change', function () { state.res = +$('res').value; refresh(true); });
+  $('scale').addEventListener('change', function () {
+    state.scale = +$('scale').value;
+    if (g3 && glOk) buildMesh(g3);
+    updateLegend(); render();
+  });
+  $('vs').addEventListener('input', function () { state.vscale = +$('vs').value; $('vsOut').textContent = state.vscale + '%'; render(); });
+  $('resetCam').addEventListener('click', resetCamera);
+  $('resetView').addEventListener('click', resetView);
+  $('zoomHere').addEventListener('click', zoomHere);
+  var ex = [[0, 0, 'c = 0'], [-1, 0, 'c = −1'], [1, 0, 'c = 1'], [-2, 0, 'c = −2'], [-0.75, 0.1, 'c = −0.75 + 0.1i']];
+  var box = $('examples');
+  ex.forEach(function (e) {
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = e[2];
+    b.addEventListener('click', function () { selectC(e[0], e[1]); });
+    box.appendChild(b);
+  });
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize', resize);
+}
+
+/* ================= Εκκίνηση ================= */
+function init() {
+  bindUI();
+  initPool();
+  glOk = initGL();
+  resize();
+  resetCamera();
+  updateLegend();
+  if (!glOk) {
+    $('tab3d').disabled = true;
+    showMsg('Ο περιηγητής σας δεν υποστηρίζει WebGL, οπότε το 3D τοπίο δεν είναι διαθέσιμο. Εμφανίζεται η 2D εικόνα.');
+    state.mode = '2d';
+  }
+  setMode(state.mode);
+  setTimeout(function () { $('hint').classList.add('hide'); }, 7000);
+  window.mandelbrotApp = {
+    state: state, core: core, selectC: selectC, camera: cam,
+    pinScreen: function () {
+      if (!mesh || !state.sel) return null; computeVP();
+      var pin = selPin(mesh.view); if (!pin) return null;
+      return project(pin.x, S() * heightAt(pin.x, pin.z), pin.z);
+    },
+    info: function () { return { glOk: glOk, mesh: mesh ? { res: mesh.res, count: mesh.count } : null, g3: g3 && { res: g3.res, maxIter: g3.maxIter }, g2: g2 && { res: g2.res, maxIter: g2.maxIter }, W: W, H: H }; }
+  };
+}
+init();
+})();
+</script>
+</body>
+</html>
