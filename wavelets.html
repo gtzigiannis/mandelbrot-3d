@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Κυματίδια και διπλασιασμός περιόδου — σύνολο Mandelbrot</title>
+<meta name="description" content="Η τροχιά του 0 για πραγματικά c στο σύνολο Mandelbrot, αναλυμένη με μετασχηματισμό κυματιδίων: κάθε διπλασιασμός περιόδου προσθέτει μια ζώνη μία οκτάβα χαμηλότερα.">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1020'/%3E%3Cpath d='M4 16c2-6 4-6 6 0s4 6 6 0 3-4 4 0 2 3 3 0 1-2 2 0 1 1 3 0' stroke='%235eead4' stroke-width='2.4' fill='none'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0b1020; --card:rgba(255,255,255,.05); --line:rgba(255,255,255,.12);
+  --txt:#e9edf9; --mut:#a8b2cd; --acc:#5eead4; --acc2:#ff5c93;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;color:var(--txt);background:var(--bg);
+  background-image:radial-gradient(1100px 520px at 15% -10%,#1d2c5c 0%,transparent 62%),radial-gradient(900px 480px at 100% 0%,#3a1d4d 0%,transparent 55%);
+  background-repeat:no-repeat;
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+a{color:var(--acc)}
+header{max-width:1280px;margin:0 auto;padding:14px 14px 10px}
+.crumb{margin:0 0 8px;font-size:.9rem}
+.crumb a{text-decoration:none;display:inline-flex;align-items:center;min-height:36px}
+.crumb a:hover{text-decoration:underline}
+h1{font-size:clamp(1.25rem,3.6vw,1.9rem);line-height:1.2;margin:0 0 6px}
+header p.lead{margin:0;color:var(--mut);max-width:82ch;font-size:.95rem}
+h2{font-size:1.02rem;margin:0 0 10px}
+.layout{display:flex;flex-direction:column;gap:14px;max-width:1280px;margin:0 auto;padding:0 12px 30px}
+.colL,.colR{display:contents}
+.o1{order:1}.o2{order:2}.o3{order:3}.o4{order:4}.o5{order:5}
+@media (min-width:980px){
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:18px;align-items:start}
+  .colL,.colR{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .colR{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 14px 12px;min-width:0}
+.card p{margin:.55em 0}
+.cardhead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cardhead h2{margin:0}
+.seg{display:inline-flex;flex-wrap:wrap;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:14px;padding:3px;gap:2px}
+.seg button{appearance:none;border:0;background:transparent;color:var(--mut);font:inherit;font-weight:600;font-size:.84rem;padding:6px 11px;min-height:36px;border-radius:11px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--acc);color:#04201c}
+.plotwrap{position:relative}
+canvas.plot{display:block;width:100%;border-radius:10px;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+#bif,#sweep{cursor:col-resize;background:rgba(5,8,20,.55)}
+#bif{height:190px;border-radius:10px 10px 0 0}
+#sweep{height:230px;border-radius:0 0 10px 10px;border-top:1px solid var(--line)}
+#orbit{height:120px;background:rgba(5,8,20,.55)}
+#scal{height:230px;background:rgba(5,8,20,.55);margin-top:8px}
+#spec{height:170px;background:rgba(5,8,20,.55);margin-top:8px}
+#thumb{height:150px;background:#0b1226;border:1px solid var(--line);margin:4px 0 10px}
+@media (max-width:640px){#bif{height:160px}#sweep{height:200px}#scal{height:200px}#spec{height:150px}}
+canvas.plot:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.prog{position:absolute;right:10px;top:10px;width:min(60%,240px);background:rgba(8,12,26,.88);border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-size:.78rem;display:none;pointer-events:none}
+.prog.on{display:block}
+.prog .track{height:6px;border-radius:99px;background:rgba(255,255,255,.14);margin-top:4px;overflow:hidden}
+.prog .fill{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+.small{font-size:.8rem;color:var(--mut);margin:6px 0 0}
+.ctl{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px;margin:12px 0 4px}
+.ctl label{font-weight:600;font-size:.92rem}
+.ctl output{font-variant-numeric:tabular-nums;color:var(--acc);font-weight:700}
+.ctl input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--acc);height:40px;margin:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}
+.row input[type=text]{font:inherit;font-variant-numeric:tabular-nums;color:var(--txt);background:#141c38;border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-height:44px;width:11.5em;max-width:100%}
+.btn{appearance:none;font:inherit;font-weight:600;font-size:.9rem;color:var(--txt);cursor:pointer;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:12px;padding:8px 14px;min-height:44px}
+.btn:hover{background:rgba(255,255,255,.12)}
+.btn.primary{background:var(--acc);color:#04201c;border-color:transparent}
+.btn.sq{min-width:44px;padding:8px 0}
+.btn:focus-visible,.seg button:focus-visible,input:focus-visible,.chips button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.chips button{appearance:none;font:inherit;font-size:.8rem;color:var(--txt);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:999px;padding:6px 11px;min-height:36px;cursor:pointer}
+.chips button:hover{background:rgba(255,255,255,.12)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;align-items:baseline;margin:6px 0}
+.kv span{color:var(--mut);font-size:.86rem}
+.kv b{font-weight:700;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#selText{font-size:.92rem}
+.note p,.note li{font-size:.93rem;color:#d7def2}
+.note b{color:#fff}
+table{border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;margin:8px 0;width:100%;max-width:560px}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mut);font-weight:600}
+.tablewrap{overflow-x:auto}
+.ramp{height:14px;border-radius:7px;border:1px solid var(--line);margin:8px 0 20px;position:relative}
+.ramp .t{position:absolute;top:17px;font-size:.72rem;color:var(--mut);transform:translateX(-50%);white-space:nowrap}
+.ramp .t:first-child{transform:none}
+.ramp .t:last-child{transform:translateX(-100%)}
+.legend ul{list-style:none;margin:6px 0 0;padding:0}
+.legend li{display:flex;gap:10px;align-items:flex-start;font-size:.86rem;margin:6px 0}
+.sw{flex:none;width:18px;height:14px;border-radius:4px;margin-top:4px;border:1px solid rgba(255,255,255,.35)}
+.sw.dark{background:#0e0c1c}.sw.stat{background:#221a3a}
+.sw.dash{border:0;border-left:2px dashed #ffe08a;border-radius:0;width:10px;margin-left:6px}
+.sw.cur{border:0;border-left:2px solid #fff;border-radius:0;width:10px;margin-left:6px}
+.sw.coi{background:repeating-linear-gradient(45deg,rgba(255,255,255,.28) 0 3px,transparent 3px 6px)}
+.msg{font-size:.85rem;background:rgba(60,20,30,.9);border:1px solid #ff5c93;border-radius:12px;padding:8px 12px;margin-top:8px}
+footer{max-width:1280px;margin:0 auto;padding:0 14px 26px;color:var(--mut);font-size:.8rem}
+noscript{display:block;max-width:1280px;margin:10px auto;padding:12px 14px;background:#3a1020;border-radius:12px}
+</style>
+</head>
+<body>
+<header>
+  <p class="crumb"><a href="./">← Τρισδιάστατο τοπίο του συνόλου Mandelbrot</a></p>
+  <h1>Κυματίδια και διπλασιασμός περιόδου</h1>
+  <p class="lead">Για πραγματικά <i>c</i> η τροχιά <i>x</i><sub>0</sub> = 0, <i>x</i><sub><i>n</i>+1</sub> = <i>x</i><sub><i>n</i></sub>² + <i>c</i> είναι μια ακολουθία αριθμών — ένα «σήμα». Ο μετασχηματισμός κυματιδίων δείχνει ποιες περίοδοι υπάρχουν μέσα του. Κάθε διπλασιασμός περιόδου προσθέτει μια νέα ζώνη ακριβώς μία οκτάβα χαμηλότερα.</p>
+</header>
+<noscript>Η σελίδα χρειάζεται JavaScript για να υπολογίσει τις τροχιές και τα κυματίδια.</noscript>
+
+<main class="layout">
+  <div class="colL">
+    <section class="card o1" aria-labelledby="hAxis">
+      <div class="cardhead">
+        <h2 id="hAxis">Ο πραγματικός άξονας <i>c</i></h2>
+        <div class="seg" role="group" aria-label="Περιοχή του άξονα">
+          <button type="button" data-range="full" aria-pressed="false">Όλο το [−2, ¼]</button>
+          <button type="button" data-range="cascade" aria-pressed="true">Καταρράκτης</button>
+          <button type="button" data-range="deep" aria-pressed="false">Βαθύτερα</button>
+          <button type="button" data-range="p3" aria-pressed="false">Παράθυρο περιόδου 3</button>
+        </div>
+      </div>
+      <div class="plotwrap">
+        <canvas id="bif" class="plot" tabindex="0" role="img" aria-label="Διάγραμμα διακλάδωσης: οι τιμές στις οποίες καταλήγει η τροχιά, για κάθε c. Βελάκια αριστερά/δεξιά: αλλαγή του c."></canvas>
+        <canvas id="sweep" class="plot" tabindex="0" role="img" aria-label="Σκαλόγραμμα σάρωσης: μέση ισχύς κυματιδίων ανά περίοδο, για κάθε c."></canvas>
+        <div class="prog" id="prog" role="status" aria-live="polite"><span id="progTxt">Υπολογισμός…</span><div class="track"><div class="fill" id="progFill"></div></div></div>
+      </div>
+      <p class="small">Πάνω: διάγραμμα διακλάδωσης — οι τιμές <i>x<sub>n</sub></i> στις οποίες καταλήγει η τροχιά. Κάτω: για κάθε <i>c</i>, η μέση ισχύς των κυματιδίων ανά περίοδο (κατακόρυφα, μία γραμμή πλέγματος ανά οκτάβα). Πατήστε ή σύρετε οριζόντια σε οποιοδήποτε από τα δύο για να επιλέξετε <i>c</i>.</p>
+      <div class="ctl">
+        <label for="cSlider">Επιλεγμένο <i>c</i></label><output id="cOut" for="cSlider"></output>
+        <input id="cSlider" type="range" min="0" max="20000" step="1" value="10000">
+      </div>
+      <div class="row">
+        <button class="btn sq" id="nudgeL" type="button" aria-label="Μικρότερο c">◀</button>
+        <input id="cInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Τιμή του c">
+        <button class="btn sq" id="nudgeR" type="button" aria-label="Μεγαλύτερο c">▶</button>
+        <button class="btn primary" id="playBtn" type="button">▶ Σάρωση</button>
+      </div>
+      <div id="inputMsg" class="msg" hidden></div>
+      <div class="chips" id="presets" aria-label="Παραδείγματα τιμών c"></div>
+    </section>
+
+    <section class="card o3" aria-labelledby="hDetail">
+      <h2 id="hDetail">Η τροχιά και το σκαλόγραμμά της για <span id="detailC"></span></h2>
+      <canvas id="orbit" class="plot" role="img" aria-label="Οι πρώτες τιμές της τροχιάς μετά τη μεταβατική φάση"></canvas>
+      <canvas id="scal" class="plot" role="img" aria-label="Σκαλόγραμμα: ισχύς κυματιδίων ανά χρονική στιγμή και περίοδο"></canvas>
+      <canvas id="spec" class="plot" role="img" aria-label="Φάσμα κυματιδίων: μέση ισχύς ανά περίοδο, με τις κορυφές σημειωμένες"></canvas>
+      <p class="small">Πάνω: 96 τιμές της τροχιάς μετά από 20.000 μεταβατικές επαναλήψεις. Μέση: σκαλόγραμμα 2.048 τιμών (οριζόντια ο χρόνος <i>n</i>, κατακόρυφα η περίοδος). Κάτω: μέση ισχύς ανά περίοδο μέσα στον κώνο επιρροής, με τις κορυφές σημειωμένες.</p>
+    </section>
+
+    <section class="card note o5" aria-labelledby="hNote">
+      <h2 id="hNote">Τι δείχνει αυτή η σελίδα</h2>
+      <p><b>Κυματίδια.</b> Ένα κυματίδιο (<i>wavelet</i>) είναι ένας σύντομος ταλαντωτικός παλμός. Αν τον τεντώσουμε στο διπλάσιο μήκος, η συχνότητά του πέφτει στο μισό — μία οκτάβα. Ο συνεχής μετασχηματισμός κυματιδίων συγκρίνει το σήμα, σε κάθε στιγμή <i>n</i>, με τεντωμένα αντίγραφα του παλμού (εδώ το κυματίδιο Morlet με ω<sub>0</sub> = 12 — στενότερο φασματικά από το συνηθισμένο 6, ώστε ζώνες που απέχουν μία οκτάβα να ξεχωρίζουν καθαρά). Το σκαλόγραμμα δείχνει πόσο ισχυρή είναι κάθε περίοδος σε κάθε στιγμή· ο μέσος όρος του ανά περίοδο είναι το φάσμα κυματιδίων.</p>
+      <p><b>Γιατί ταιριάζουν με τον διπλασιασμό περιόδου.</b> Καθώς το <i>c</i> μειώνεται από −3/4 προς <i>c</i><sub>∞</sub> ≈ −1,4011552, η τροχιά του 0 περνά από κύκλους περιόδου 2, 4, 8, 16, … Κάθε διπλασιασμός <b>προσθέτει</b> μια νέα, ασθενέστερη ζώνη στη μισή συχνότητα — μία οκτάβα χαμηλότερα — ενώ οι προηγούμενες ζώνες παραμένουν. Επειδή οι κλίμακες των κυματιδίων είναι κι αυτές ισαπέχουσες σε οκτάβες, οι ζώνες σχηματίζουν μια ισαπέχουσα «σκάλα».</p>
+      <p><b>Σύνδεση με το σύνολο Mandelbrot.</b> Το σύνολο τέμνει τον πραγματικό άξονα ακριβώς στο διάστημα [−2, 1/4], άρα για αυτά τα <i>c</i> η τροχιά του 0 μένει φραγμένη (γνωστό θεώρημα — όχι συμπέρασμα αυτού του υπολογισμού). Τα διαστήματα περιόδου 1, 2, 4, 8, … είναι οι τομές του άξονα με την κύρια καρδιοειδή και τη σειρά των «βολβών» αριστερά της, που φαίνονται και στο τρισδιάστατο τοπίο. Στο παράθυρο περιόδου 3, κοντά στο <i>c</i> ≈ −1,7549, ο άξονας διασχίζει ένα μικρό αντίγραφο του συνόλου Mandelbrot: η ίδια δομή επαναλαμβάνεται σε μικρότερη κλίμακα.</p>
+      <p><b>Η σταθερά Feigenbaum.</b> Τα διαστήματα ανάμεσα σε διαδοχικούς διπλασιασμούς μικραίνουν γεωμετρικά· ο λόγος των μηκών τους τείνει στη σταθερά δ = 4,6692…  Γι’ αυτό η «Σάρωση» στον καταρράκτη επιβραδύνεται γεωμετρικά: κάθε διπλασιασμός διαρκεί περίπου τον ίδιο χρόνο.</p>
+      <div class="tablewrap"><table id="feigTable" aria-label="Σημεία διπλασιασμού περιόδου και λόγοι διαστημάτων"></table></div>
+      <details>
+        <summary>Λεπτομέρειες υπολογισμού και όρια ακρίβειας</summary>
+        <ul>
+          <li><b>Τροχιά:</b> 20.000 μεταβατικές επαναλήψεις και μετά 2.048 τιμές (στη σάρωση: 20.000 και 1.024). Ο μέσος όρος αφαιρείται πριν από τον μετασχηματισμό.</li>
+          <li><b>Μετασχηματισμός:</b> συνεχής μετασχηματισμός κυματιδίων Morlet μέσω FFT, 12 κλίμακες ανά οκτάβα (8 στη σάρωση), περίοδοι έως 256 (128 στη σάρωση). Ισχύς |<i>W</i>|²/<i>s</i>, ώστε ημίτονα ίσου πλάτους να δίνουν ίσες κορυφές σε όλες τις κλίμακες (διόρθωση Liu κ.ά., 2007). Η «περίοδος» μιας κλίμακας <i>s</i> είναι 2π<i>s</i>/ω<sub>0</sub>, όπου βρίσκεται η κορυφή για ένα ημίτονο. Αναφέρονται μόνο κορυφές για τις οποίες μένουν τουλάχιστον δύο πλήρεις περίοδοι μέσα στον κώνο επιρροής.</li>
+          <li><b>Κώνος επιρροής:</b> κοντά στα άκρα του σήματος ο μετασχηματισμός επηρεάζεται από τα όρια (σκιασμένη περιοχή, πλάτος √2·<i>s</i>)· αυτές οι τιμές εξαιρούνται από το φάσμα.</li>
+          <li><b>Χρώμα:</b> log<sub>10</sub> της ισχύος σχετικά με το μέγιστο, από −8 έως 0. Κάθε νέα ζώνη είναι πολύ ασθενέστερη από την προηγούμενη, γι’ αυτό χρειάζεται λογαριθμική κλίμακα που καλύπτει οκτώ τάξεις μεγέθους. Στη σάρωση κάθε στήλη κανονικοποιείται χωριστά.</li>
+          <li><b>Περίοδος:</b> βρίσκεται αριθμητικά ως το μικρότερο <i>p</i> ≤ 1.024 με |<i>x</i><sub><i>n</i>+<i>p</i></sub> − <i>x</i><sub><i>n</i></sub>| &lt; 10⁻⁸ στο τέλος της τροχιάς. Κοντά σε σημείο διακλάδωσης η σύγκλιση είναι πολύ αργή, οπότε μπορεί να μη βρεθεί περίοδος ή να φαίνονται αμυδρά ίχνη της μεταβατικής φάσης.</li>
+          <li><b>Σημεία διακλάδωσης:</b> οι τιμές του πίνακα είναι γνωστές αριθμητικές τιμές· οι δοκιμές της σελίδας επιβεβαιώνουν ότι η υπολογισμένη περίοδος αλλάζει εκατέρωθεν καθεμίας.</li>
+          <li><b>Ήχος:</b> η τροχιά παίζεται ως κυματομορφή· η περίοδος 2 αντιστοιχεί σε περίπου 1.300 Hz και κάθε διπλασιασμός σε μία οκτάβα χαμηλότερα. Σε iPhone, αν δεν ακούγεται τίποτα, απενεργοποιήστε τη σίγαση.</li>
+          <li>Όλοι οι υπολογισμοί γίνονται στη συσκευή σας· δεν χρειάζεται διακομιστής, λογαριασμός ή κλειδί.</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+
+  <div class="colR">
+    <section class="card o2" aria-labelledby="hSel">
+      <h2 id="hSel">Επιλεγμένο <i>c</i></h2>
+      <canvas id="thumb" class="plot" role="img" aria-label="Το σύνολο Mandelbrot με τον πραγματικό άξονα, την περιοχή που εξετάζεται και το επιλεγμένο c"></canvas>
+      <div class="kv"><span><i>c</i></span><b id="selC"></b></div>
+      <div class="kv"><span>Περίοδος τροχιάς</span><b id="selP"></b></div>
+      <div class="kv"><span>Ζώνες (κορυφές φάσματος)</span><b id="selBands"></b></div>
+      <p id="selText"></p>
+      <div class="row">
+        <button class="btn" id="listenBtn" type="button">♪ Άκουσε την τροχιά</button>
+      </div>
+      <p class="small" id="audioNote"></p>
+    </section>
+
+    <section class="card legend o4" aria-labelledby="hLeg">
+      <h2 id="hLeg">Υπόμνημα</h2>
+      <div style="font-size:.86rem">Σχετική ισχύς κυματιδίων, log<sub>10</sub>:</div>
+      <div class="ramp" id="ramp" role="img" aria-label="Κλίμακα χρώματος: σκούρο μπλε για 10 στην −8, ροζ για το μέγιστο"></div>
+      <ul>
+        <li><span class="sw dark"></span><span>ισχύς κάτω από 10⁻⁸ του μεγίστου</span></li>
+        <li><span class="sw stat"></span><span>σταθερό σημείο: καμία ταλάντωση (στη σάρωση)</span></li>
+        <li><span class="sw dash"></span><span>σημείο διπλασιασμού περιόδου· ο αριθμός είναι η νέα περίοδος</span></li>
+        <li><span class="sw cur"></span><span>επιλεγμένο <i>c</i></span></li>
+        <li><span class="sw coi"></span><span>εκτός κώνου επιρροής (επηρεάζεται από τα άκρα του σήματος)</span></li>
+      </ul>
+    </section>
+  </div>
+</main>
+<footer>Στατική σελίδα (HTML + JavaScript). Οι υπολογισμοί γίνονται στη συσκευή σας με Web Workers. <a href="./">Επιστροφή στο τρισδιάστατο τοπίο</a>.</footer>
+
+<!-- Μαθηματικός πυρήνας: χρησιμοποιείται από τη σελίδα, τους Web Workers και το tests/test-wavelets.js -->
+<script id="core-src" type="text/plain">
+/*CORE-START*/
+var W0 = 12;                                 // παράμετρος Morlet ω0 (12: στενό φασματικά, ώστε ζώνες μίας οκτάβας να ξεχωρίζουν)
+var PERIOD_PER_SCALE = 2 * Math.PI / W0;     // περίοδος = 2π s / ω0 (κορυφή της διορθωμένης ισχύος)
+
+// Τροχιά του 0 για πραγματικό c: transient επαναλήψεις και μετά N τιμές. null αν |x| > 2 (διαφυγή).
+function orbitReal(c, transient, N) {
+  var x = 0, i;
+  for (i = 0; i < transient; i++) { x = x * x + c; if (x > 2 || x < -2) return null; }
+  var out = new Float64Array(N);
+  for (i = 0; i < N; i++) { x = x * x + c; if (x > 2 || x < -2) return null; out[i] = x; }
+  return out;
+}
+
+var _fftCache = {};
+function fftPrep(N) {
+  var p = _fftCache[N]; if (p) return p;
+  var bits = Math.round(Math.log(N) / Math.LN2), rev = new Uint32Array(N), i, k;
+  for (i = 0; i < N; i++) { var r = 0, v = i; for (var b = 0; b < bits; b++) { r = (r << 1) | (v & 1); v >>= 1; } rev[i] = r; }
+  var cs = new Float64Array(N / 2), sn = new Float64Array(N / 2);
+  for (k = 0; k < N / 2; k++) { cs[k] = Math.cos(2 * Math.PI * k / N); sn[k] = Math.sin(2 * Math.PI * k / N); }
+  p = { rev: rev, cos: cs, sin: sn }; _fftCache[N] = p; return p;
+}
+// FFT radix-2 επί τόπου. Ευθύς: X_k = Σ x_n e^{-2πikn/N}. Αντίστροφος: με 1/N.
+function fft(re, im, inverse) {
+  var N = re.length, p = fftPrep(N), rev = p.rev, i, t;
+  for (i = 0; i < N; i++) { var j = rev[i]; if (j > i) { t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+  var sgn = inverse ? 1 : -1;
+  for (var size = 2; size <= N; size <<= 1) {
+    var half = size >> 1, step = N / size;
+    for (var start = 0; start < N; start += size) {
+      for (var k = 0; k < half; k++) {
+        var wr = p.cos[k * step], wi = sgn * p.sin[k * step], a = start + k, b = a + half;
+        var xr = re[b] * wr - im[b] * wi, xi = re[b] * wi + im[b] * wr;
+        re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi;
+      }
+    }
+  }
+  if (inverse) for (i = 0; i < N; i++) { re[i] /= N; im[i] /= N; }
+}
+
+// Κλίμακες ισαπέχουσες σε log2(περίοδος), voices ανά οκτάβα
+function makeScales(log2Min, log2Max, voices) {
+  var n = Math.floor((log2Max - log2Min) * voices + 1e-9) + 1;
+  var lp = new Float64Array(n), periods = new Float64Array(n), scales = new Float64Array(n);
+  for (var i = 0; i < n; i++) { lp[i] = log2Min + i / voices; periods[i] = Math.pow(2, lp[i]); scales[i] = periods[i] / PERIOD_PER_SCALE; }
+  return { n: n, log2: lp, periods: periods, scales: scales, voices: voices, log2Min: log2Min };
+}
+
+// Συνεχής μετασχηματισμός Morlet (Torrence & Compo 1998) μέσω FFT. Επιστρέφει ισχύ |W|^2 / s (Liu κ.ά. 2007).
+function cwtPower(x, sc) {
+  var N = x.length, i, k, mean = 0, vr = 0;
+  for (i = 0; i < N; i++) mean += x[i];
+  mean /= N;
+  for (i = 0; i < N; i++) vr += (x[i] - mean) * (x[i] - mean);
+  vr /= N;
+  var Xr = new Float64Array(N), Xi = new Float64Array(N);
+  for (i = 0; i < N; i++) Xr[i] = x[i] - mean;
+  fft(Xr, Xi, false);
+  var pw = new Float32Array(sc.n * N), wr = new Float64Array(N), wi = new Float64Array(N);
+  var norm = Math.pow(Math.PI, -0.25), half = N / 2;
+  for (var s = 0; s < sc.n; s++) {
+    var a = sc.scales[s], amp = norm * Math.sqrt(2 * Math.PI * a);
+    for (k = 0; k < N; k++) {
+      var psi = 0;
+      if (k > 0 && k <= half) {
+        var d = a * (2 * Math.PI * k / N) - W0;
+        if (d > -9 && d < 9) { psi = amp * Math.exp(-0.5 * d * d); if (k === half) psi *= 0.5; }
+      }
+      wr[k] = Xr[k] * psi; wi[k] = Xi[k] * psi;
+    }
+    fft(wr, wi, true);
+    var base = s * N, inv = 1 / a;
+    for (i = 0; i < N; i++) pw[base + i] = (wr[i] * wr[i] + wi[i] * wi[i]) * inv;
+  }
+  return { power: pw, variance: vr, mean: mean, N: N };
+}
+
+// Πλάτος του κώνου επιρροής για Morlet: √2 · s
+function coiOf(scale) { return Math.ceil(Math.SQRT2 * scale); }
+
+// Μέση ισχύς ανά κλίμακα μέσα στον κώνο επιρροής (NaN αν δεν μένει έγκυρο τμήμα)
+function globalSpectrum(cw, sc) {
+  var N = cw.N, out = new Float64Array(sc.n);
+  for (var s = 0; s < sc.n; s++) {
+    var c0 = coiOf(sc.scales[s]), lo = c0, hi = N - 1 - c0, sum = 0, cnt = 0, base = s * N;
+    for (var i = lo; i <= hi; i++) { sum += cw.power[base + i]; cnt++; }
+    out[s] = cnt > 0 ? sum / cnt : NaN;
+  }
+  return out;
+}
+
+// log10(τιμή / μέγιστο), με κάτω όριο -12
+function logRel(g) {
+  var mx = 0, i, out = new Float64Array(g.length);
+  for (i = 0; i < g.length; i++) if (g[i] > mx) mx = g[i];
+  for (i = 0; i < g.length; i++) out[i] = (mx > 0 && g[i] > 0) ? Math.max(-12, Math.log(g[i] / mx) / Math.LN10) : -12;
+  return out;
+}
+
+// Κορυφές με ελάχιστη προεξοχή (σε δεκάδες) πάνω από το κατώφλι floor
+function findPeaks(ls, sc, minProm, floor) {
+  var n = ls.length, peaks = [];
+  for (var i = 0; i < n; i++) {
+    var v = ls[i];
+    if (!(v > floor)) continue;
+    var l = i > 0 ? ls[i - 1] : -Infinity, r = i < n - 1 ? ls[i + 1] : -Infinity;
+    if (!(v >= l && v > r)) continue;
+    // Προεξοχή: η πλευρά που φτάνει στο άκρο του εύρους αγνοείται (πέρα από τα άκρα το φάσμα δεν είναι γνωστό)
+    var lmin = v, j = i - 1;
+    while (j >= 0 && !(ls[j] > v)) { if (ls[j] < lmin) lmin = ls[j]; j--; }
+    var lEdge = j < 0, rmin = v; j = i + 1;
+    while (j < n && !(ls[j] > v)) { if (ls[j] < rmin) rmin = ls[j]; j++; }
+    var rEdge = j >= n;
+    var prom = (lEdge && rEdge) ? v - Math.min(lmin, rmin) : v - Math.max(lEdge ? -Infinity : lmin, rEdge ? -Infinity : rmin);
+    if (prom < minProm) continue;
+    var off = 0;
+    if (i > 0 && i < n - 1) { var den = l - 2 * v + r; if (den < 0) off = Math.max(-0.5, Math.min(0.5, 0.5 * (l - r) / den)); }
+    var lg = sc.log2[i] + off / sc.voices;
+    peaks.push({ index: i, log2: lg, period: Math.pow(2, lg), value: v, prominence: prom });
+  }
+  return peaks;
+}
+
+// Μικρότερη περίοδος p ≤ maxP με |x[i] − x[i−p]| < tol στο τέλος της τροχιάς· 0 αν δεν βρεθεί
+function detectPeriod(x, maxP, tol) {
+  var N = x.length;
+  for (var p = 1; p <= maxP && 2 * p <= N; p++) {
+    var M = Math.min(N - p, Math.max(4 * p, 64)), ok = true;
+    for (var i = N - 1; i >= N - M; i--) { if (Math.abs(x[i] - x[i - p]) >= tol) { ok = false; break; } }
+    if (ok) return p;
+  }
+  return 0;
+}
+
+// Λογαριθμικό σχετικό φάσμα για ένα c, ή null αν η τροχιά διαφεύγει ή είναι σταθερό σημείο
+function spectrumFor(c, transient, N, sc) {
+  var x = orbitReal(c, transient, N);
+  if (!x) return null;
+  var cw = cwtPower(x, sc);
+  if (!(cw.variance > 1e-18)) return null;
+  return logRel(globalSpectrum(cw, sc));
+}
+
+// Ζώνη στηλών της σάρωσης (εκτελείται στους Web Workers)
+function sweepBand(m) {
+  var sc = makeScales(m.log2Min, m.log2Max, m.voices), nS = sc.n, cols = m.end - m.start;
+  var out = new Float32Array(cols * nS);
+  for (var j = 0; j < cols; j++) {
+    var c = m.lo + (m.start + j + 0.5) * (m.hi - m.lo) / m.cols;
+    var sp = spectrumFor(c, m.transient, m.N, sc);
+    for (var s = 0; s < nS; s++) out[j * nS + s] = sp ? sp[s] : NaN;
+  }
+  return { jobId: m.jobId, start: m.start, end: m.end, data: out };
+}
+
+// Γνωστά σημεία διπλασιασμού περιόδου στον πραγματικό άξονα (για z² + c)
+var BIFURCATIONS = [
+  { c: -0.75, to: 2 },
+  { c: -1.25, to: 4 },
+  { c: -1.3680989394, to: 8 },
+  { c: -1.3940461566, to: 16 },
+  { c: -1.3996312389, to: 32 }
+];
+var C_INF = -1.4011551890;   // σημείο συσσώρευσης (Feigenbaum)
+var C_P3 = -1.75;            // αρχή του παραθύρου περιόδου 3
+/*CORE-END*/
+</script>
+
+<script>
+(function () {
+'use strict';
+var $ = function (id) { return document.getElementById(id); };
+var coreSrc = $('core-src').textContent;
+var core = new Function(coreSrc + '\nreturn {orbitReal:orbitReal,fft:fft,makeScales:makeScales,cwtPower:cwtPower,coiOf:coiOf,globalSpectrum:globalSpectrum,logRel:logRel,findPeaks:findPeaks,detectPeriod:detectPeriod,spectrumFor:spectrumFor,sweepBand:sweepBand,BIFURCATIONS:BIFURCATIONS,C_INF:C_INF,C_P3:C_P3,PERIOD_PER_SCALE:PERIOD_PER_SCALE};')();
+
+/* ---------- ρυθμίσεις ---------- */
+var FLOOR = -8;
+var DETAIL = { N: 2048, transient: 20000, sc: core.makeScales(0.9, 8, 12) };
+var SWEEP = { N: 1024, transient: 20000, log2Min: 0.9, log2Max: 7, voices: 8 };
+SWEEP.sc = core.makeScales(SWEEP.log2Min, SWEEP.log2Max, SWEEP.voices);
+var RANGES = {
+  full: { lo: -2, hi: 0.25 },
+  cascade: { lo: -1.42, hi: -0.70 },
+  deep: { lo: -1.4025, hi: -1.36 },
+  p3: { lo: -1.80, hi: -1.74 }
+};
+var PRESETS = [
+  [-0.5, 'c = −0.5 · σταθερό σημείο'], [-1, 'c = −1 · περίοδος 2'], [-1.3, 'c = −1.3 · περίοδος 4'],
+  [-1.385, 'c = −1.385 · περίοδος 8'], [-1.397, 'c = −1.397 · περίοδος 16'], [-1.4005, 'c = −1.4005 · περίοδος 32'],
+  [core.C_INF, 'c∞ ≈ −1.40116 · συσσώρευση'], [-1.7549, 'c = −1.7549 · περίοδος 3'], [-1.9, 'c = −1.9 · χάος']
+];
+var state = { c: -1.3, rangeKey: 'cascade', lo: RANGES.cascade.lo, hi: RANGES.cascade.hi, playing: false };
+
+/* ---------- βοηθητικά ---------- */
+function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+function fmt(x, d) {
+  if (!isFinite(x)) return '—';
+  var s = x.toFixed(d);
+  if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  if (s === '-0') s = '0';
+  return s.replace('-', '−');
+}
+function fmtC(c) { var w = state.hi - state.lo, d = clamp(Math.ceil(-Math.log10(w)) + 4, 4, 10); return fmt(c, d); }
+function fmtInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function niceTicks(lo, hi, target) {
+  var range = hi - lo, raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+  var step = (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p, out = [];
+  for (var t = Math.ceil(lo / step - 1e-9) * step; t <= hi + 1e-9 * step; t += step) out.push(+t.toPrecision(12));
+  return { ticks: out, dec: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
+}
+
+/* ---------- χρώματα ---------- */
+var STOPS = [[0, 13, 27, 76], [.18, 31, 95, 191], [.38, 25, 195, 201], [.58, 126, 224, 90], [.76, 255, 225, 77], [.9, 255, 138, 61], [1, 255, 61, 127]];
+var LUT = new Uint8Array(1024 * 3);
+(function () {
+  for (var i = 0; i < 1024; i++) {
+    var p = i / 1023, k = 0;
+    while (k < STOPS.length - 2 && p > STOPS[k + 1][0]) k++;
+    var a = STOPS[k], b = STOPS[k + 1], t = (p - a[0]) / (b[0] - a[0]);
+    for (var c = 0; c < 3; c++) LUT[i * 3 + c] = Math.round(a[c + 1] + (b[c + 1] - a[c + 1]) * t);
+  }
+})();
+var DARK = [14, 12, 28], STAT = [34, 26, 58];
+function putColor(v, px, o) {
+  if (v !== v) { px[o] = STAT[0]; px[o + 1] = STAT[1]; px[o + 2] = STAT[2]; }
+  else {
+    var p = (v - FLOOR) / -FLOOR;
+    if (p <= 0) { px[o] = DARK[0]; px[o + 1] = DARK[1]; px[o + 2] = DARK[2]; }
+    else { var k = Math.round(Math.min(1, p) * 1023) * 3; px[o] = LUT[k]; px[o + 1] = LUT[k + 1]; px[o + 2] = LUT[k + 2]; }
+  }
+  px[o + 3] = 255;
+}
+
+/* ---------- καμβάδες ---------- */
+var cvBif = $('bif'), cvSweep = $('sweep'), cvOrbit = $('orbit'), cvScal = $('scal'), cvSpec = $('spec'), cvThumb = $('thumb');
+var ALL = [cvBif, cvSweep, cvOrbit, cvScal, cvSpec, cvThumb];
+var dpr = 1;
+function small() { return (cvBif._w || 600) < 520; }
+function sizeCanvas(cv) {
+  var w = Math.max(60, cv.clientWidth), h = Math.max(40, cv.clientHeight);
+  cv._w = w; cv._h = h;
+  var W = Math.round(w * dpr), H = Math.round(h * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+}
+function ctxOf(cv) { var x = cv.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); return x; }
+function rectOf(cv, mb) {
+  var ml = small() ? 44 : 54, mr = 12, mt = 8;
+  if (mb === undefined) mb = 26;
+  return { x: ml, y: mt, w: Math.max(40, cv._w - ml - mr), h: Math.max(30, cv._h - mt - mb) };
+}
+function label(ctx, txt, x, y, align, size, color, base) {
+  ctx.font = '600 ' + (size || 11) + 'px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+  ctx.textAlign = align || 'center'; ctx.textBaseline = base || 'middle';
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,26,.9)'; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = color || 'rgba(235,240,255,.95)'; ctx.fillText(txt, x, y);
+}
+function cToX(r, c) { return r.x + (c - state.lo) / (state.hi - state.lo) * r.w; }
+function xToC(r, x) { return state.lo + clamp((x - r.x) / r.w, 0, 1) * (state.hi - state.lo); }
+
+/* ---------- διάγραμμα διακλάδωσης ---------- */
+var bifImg = null;
+function computeBif() {
+  var r = rectOf(cvBif, 6), cols = Math.max(40, Math.round(r.w * dpr)), rows = Math.max(30, Math.round(r.h * dpr)), K = 260, T = 4000;
+  var vals = new Float32Array(cols * K), ymin = Infinity, ymax = -Infinity;
+  for (var i = 0; i < cols; i++) {
+    var c = state.lo + (i + 0.5) / cols * (state.hi - state.lo), x = 0, j;
+    for (j = 0; j < T; j++) x = x * x + c;
+    for (j = 0; j < K; j++) { x = x * x + c; vals[i * K + j] = x; if (x < ymin) ymin = x; if (x > ymax) ymax = x; }
+  }
+  var pad = Math.max(0.04 * (ymax - ymin), 0.02); ymin -= pad; ymax += pad;
+  var cnt = new Uint16Array(cols * rows), mx = 1;
+  for (i = 0; i < cols; i++) for (j = 0; j < K; j++) {
+    var row = Math.floor((ymax - vals[i * K + j]) / (ymax - ymin) * rows);
+    if (row >= 0 && row < rows) { var q = row * cols + i; cnt[q]++; if (cnt[q] > mx) mx = cnt[q]; }
+  }
+  var oc = document.createElement('canvas'); oc.width = cols; oc.height = rows;
+  var octx = oc.getContext('2d'), id = octx.createImageData(cols, rows), px = id.data, lm = Math.log(1 + mx);
+  for (var q2 = 0; q2 < cols * rows; q2++) if (cnt[q2]) {
+    var f = Math.log(1 + cnt[q2]) / lm, o = q2 * 4;
+    px[o] = 94 + 161 * f * 0.6; px[o + 1] = 234; px[o + 2] = 212; px[o + 3] = Math.round(90 + 165 * Math.min(1, f * 1.6));
+  }
+  octx.putImageData(id, 0, 0);
+  bifImg = { canvas: oc, ymin: ymin, ymax: ymax, lo: state.lo, hi: state.hi };
+}
+function drawMarkers(ctx, r, withLabels) {
+  var list = core.BIFURCATIONS.map(function (b) { return { c: b.c, t: String(b.to) }; });
+  list.push({ c: core.C_INF, t: 'c∞' }); list.push({ c: core.C_P3, t: '3' });
+  var lastX = -1e9;
+  list.sort(function (a, b) { return b.c - a.c; });
+  ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,224,138,.55)';
+  list.forEach(function (m) {
+    if (m.c < state.lo || m.c > state.hi) return;
+    var x = cToX(r, m.c);
+    ctx.beginPath(); ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); ctx.stroke();
+    if (withLabels && Math.abs(x - lastX) > 16) { ctx.setLineDash([]); label(ctx, m.t, x, r.y + 8, 'center', 10, '#ffe08a'); ctx.setLineDash([4, 4]); lastX = x; }
+  });
+  ctx.restore();
+}
+function drawCursor(ctx, r) {
+  if (state.c < state.lo || state.c > state.hi) return;
+  var x = cToX(r, state.c);
+  ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+  ctx.beginPath(); ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); ctx.stroke();
+  ctx.lineWidth = 1.4; ctx.strokeStyle = '#fff'; ctx.stroke(); ctx.restore();
+}
+function drawBif() {
+  var ctx = ctxOf(cvBif), r = rectOf(cvBif, 6), sm = small(), fs = sm ? 10 : 11;
+  ctx.clearRect(0, 0, cvBif._w, cvBif._h);
+  if (!bifImg || bifImg.lo !== state.lo || bifImg.hi !== state.hi) computeBif();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(bifImg.canvas, r.x, r.y, r.w, r.h);
+  var tk = niceTicks(bifImg.ymin, bifImg.ymax, sm ? 3 : 4);
+  tk.ticks.forEach(function (t) {
+    var y = r.y + (bifImg.ymax - t) / (bifImg.ymax - bifImg.ymin) * r.h;
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke();
+    label(ctx, fmt(t, tk.dec), r.x - 6, y, 'right', fs);
+  });
+  ctx.save(); ctx.translate(sm ? 10 : 13, r.y + r.h / 2); ctx.rotate(-Math.PI / 2); label(ctx, 'xₙ', 0, 0, 'center', fs + 1, '#9ff3e4'); ctx.restore();
+  drawMarkers(ctx, r, true);
+  drawCursor(ctx, r);
+}
+
+/* ---------- σάρωση (Web Workers) ---------- */
+var WORKER_SRC = coreSrc + '\nself.onmessage=function(e){var r=sweepBand(e.data);self.postMessage(r,[r.data.buffer]);};';
+var pool = { workers: [], job: null, nextId: 1 };
+function FakeWorker() {
+  var self = this; this.onmessage = null;
+  this.postMessage = function (m) { setTimeout(function () { var r = core.sweepBand(m); if (self.onmessage) self.onmessage({ data: r }); }, 0); };
+}
+function initPool() {
+  var n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1)), url = null;
+  try { url = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' })); } catch (e) { url = null; }
+  for (var i = 0; i < n; i++) {
+    var w = null;
+    if (url) { try { w = new Worker(url); } catch (e) { w = null; } }
+    if (!w) w = new FakeWorker();
+    w.busy = false;
+    w.onmessage = onWorker.bind(null, w);
+    w.onerror = function (ev) { console.error('Σφάλμα worker', ev && ev.message); };
+    pool.workers.push(w);
+  }
+}
+var sweep = null;   // { lo, hi, cols, nS, data, done, img, imgData }
+function startSweep() {
+  var r = rectOf(cvSweep), cols = clamp(Math.round(r.w), 160, 560), nS = SWEEP.sc.n;
+  var data = new Float32Array(cols * nS); data.fill(NaN);
+  var oc = document.createElement('canvas'); oc.width = cols; oc.height = nS;
+  var octx = oc.getContext('2d'), id = octx.createImageData(cols, nS);
+  for (var i = 0; i < cols * nS; i++) { id.data[i * 4] = 8; id.data[i * 4 + 1] = 10; id.data[i * 4 + 2] = 22; id.data[i * 4 + 3] = 255; }
+  octx.putImageData(id, 0, 0);
+  var job = { id: pool.nextId++, lo: state.lo, hi: state.hi, cols: cols, queue: [], done: 0 };
+  var band = Math.max(4, Math.round(cols / 48));
+  for (var s = 0; s < cols; s += band) job.queue.push([s, Math.min(cols, s + band)]);
+  sweep = { lo: state.lo, hi: state.hi, cols: cols, nS: nS, data: data, canvas: oc, ctx: octx, id: id, done: 0, complete: false };
+  pool.job = job;
+  progShow(0);
+  pump();
+}
+function pump() {
+  var job = pool.job; if (!job) return;
+  pool.workers.forEach(function (w) {
+    if (w.busy || !job.queue.length) return;
+    var b = job.queue.shift(); w.busy = true;
+    w.postMessage({ jobId: job.id, lo: job.lo, hi: job.hi, cols: job.cols, start: b[0], end: b[1], N: SWEEP.N, transient: SWEEP.transient, log2Min: SWEEP.log2Min, log2Max: SWEEP.log2Max, voices: SWEEP.voices });
+  });
+}
+function onWorker(w, e) {
+  w.busy = false;
+  var d = e.data, job = pool.job;
+  if (job && d.jobId === job.id && sweep) {
+    var nS = sweep.nS, px = sweep.id.data, cols = sweep.cols;
+    for (var j = d.start; j < d.end; j++) for (var s = 0; s < nS; s++) {
+      var v = d.data[(j - d.start) * nS + s];
+      sweep.data[j * nS + s] = v;
+      putColor(v, px, ((nS - 1 - s) * cols + j) * 4);
+    }
+    sweep.ctx.putImageData(sweep.id, 0, 0);
+    sweep.done += d.end - d.start;
+    progShow(sweep.done / cols);
+    if (sweep.done >= cols) { sweep.complete = true; pool.job = null; progHide(); }
+    render();
+  }
+  pump();
+}
+var progTimer = 0;
+function progShow(f) {
+  $('progFill').style.width = Math.round(f * 100) + '%';
+  $('progTxt').textContent = 'Υπολογισμός σάρωσης… ' + Math.round(f * 100) + '%';
+  if (!progTimer && f < 1) progTimer = setTimeout(function () { if (pool.job) $('prog').classList.add('on'); }, 150);
+}
+function progHide() { clearTimeout(progTimer); progTimer = 0; $('prog').classList.remove('on'); }
+
+function periodY(r, sc, lg) {
+  var nS = sc.n, s = (lg - sc.log2Min) * sc.voices;
+  return r.y + (nS - 1 - s + 0.5) / nS * r.h;
+}
+function drawPeriodAxis(ctx, r, sc, maxLog2) {
+  var sm = small(), fs = sm ? 10 : 11;
+  for (var k = 1; k <= maxLog2; k++) {
+    var y = periodY(r, sc, k);
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke();
+    if (!sm || k % 2 === 1 || k <= 4) label(ctx, String(Math.pow(2, k)), r.x - 6, y, 'right', fs);
+  }
+  ctx.save(); ctx.translate(sm ? 10 : 13, r.y + r.h / 2); ctx.rotate(-Math.PI / 2);
+  label(ctx, sm ? 'περίοδος' : 'περίοδος (οκτάβες)', 0, 0, 'center', fs + 1, '#ffb3cd'); ctx.restore();
+}
+function drawSweep() {
+  var ctx = ctxOf(cvSweep), r = rectOf(cvSweep), sm = small(), fs = sm ? 10 : 11;
+  ctx.clearRect(0, 0, cvSweep._w, cvSweep._h);
+  if (sweep && sweep.lo === state.lo && sweep.hi === state.hi) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sweep.canvas, r.x, r.y, r.w, r.h);
+  }
+  drawPeriodAxis(ctx, r, SWEEP.sc, Math.floor(SWEEP.log2Max));
+  var tk = niceTicks(state.lo, state.hi, sm ? 4 : 7);
+  tk.ticks.forEach(function (t) {
+    var x = cToX(r, t);
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.moveTo(x, r.y + r.h); ctx.lineTo(x, r.y + r.h + 4); ctx.stroke();
+    if (x < r.x + r.w - 30) label(ctx, fmt(t, tk.dec), x, r.y + r.h + 13, 'center', fs);
+  });
+  drawMarkers(ctx, r, false);
+  drawCursor(ctx, r);
+  label(ctx, 'c →', r.x + r.w - 2, r.y + r.h + 13, 'right', fs, '#9ff3e4');
+}
+
+/* ---------- ανάλυση επιλεγμένου c ---------- */
+var A = null;
+function analyze(c) {
+  var x = core.orbitReal(c, DETAIL.transient, DETAIL.N);
+  if (!x) return { c: c, escaped: true };
+  var cw = core.cwtPower(x, DETAIL.sc), res = { c: c, x: x, cw: cw, stationary: !(cw.variance > 1e-18), period: core.detectPeriod(x, 1024, 1e-8) };
+  if (!res.stationary) {
+    res.logSpec = core.logRel(core.globalSpectrum(cw, DETAIL.sc));
+    res.peaks = core.findPeaks(res.logSpec, DETAIL.sc, 0.4, FLOOR).filter(function (pk) {
+      return DETAIL.N - 2 * core.coiOf(DETAIL.sc.scales[pk.index]) >= 2 * pk.period;   // ≥ 2 πλήρεις περίοδοι μέσα στον κώνο
+    });
+    var mx = 0, p = cw.power;
+    for (var i = 0; i < p.length; i++) if (p[i] > mx) mx = p[i];
+    res.maxPower = mx;
+  }
+  return res;
+}
+var scalImg = null;
+function buildScalImage() {
+  var N = DETAIL.N, nS = DETAIL.sc.n;
+  if (!scalImg) { scalImg = document.createElement('canvas'); scalImg.width = N; scalImg.height = nS; scalImg._id = scalImg.getContext('2d').createImageData(N, nS); }
+  var px = scalImg._id.data;
+  if (!A || A.stationary || A.escaped) { for (var q = 0; q < N * nS; q++) { px[q * 4] = DARK[0]; px[q * 4 + 1] = DARK[1]; px[q * 4 + 2] = DARK[2]; px[q * 4 + 3] = 255; } }
+  else {
+    var p = A.cw.power, lm = Math.log(A.maxPower);
+    for (var s = 0; s < nS; s++) {
+      var row = (nS - 1 - s) * N, base = s * N;
+      for (var i = 0; i < N; i++) { var v = p[base + i] > 0 ? (Math.log(p[base + i]) - lm) / Math.LN10 : -99; putColor(v, px, (row + i) * 4); }
+    }
+  }
+  scalImg.getContext('2d').putImageData(scalImg._id, 0, 0);
+}
+function drawOrbit() {
+  var ctx = ctxOf(cvOrbit), r = rectOf(cvOrbit, 22), sm = small(), fs = sm ? 10 : 11;
+  ctx.clearRect(0, 0, cvOrbit._w, cvOrbit._h);
+  if (!A || A.escaped) return;
+  var K = 96, x = A.x, mn = Infinity, mxv = -Infinity, i;
+  for (i = 0; i < K; i++) { if (x[i] < mn) mn = x[i]; if (x[i] > mxv) mxv = x[i]; }
+  var pad = Math.max((mxv - mn) * 0.12, 0.05); mn -= pad; mxv += pad;
+  var Y = function (v) { return r.y + (mxv - v) / (mxv - mn) * r.h; }, X = function (n) { return r.x + (n + 0.5) / K * r.w; };
+  var tk = niceTicks(mn, mxv, 3);
+  tk.ticks.forEach(function (t) { var y = Y(t); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke(); label(ctx, fmt(t, tk.dec), r.x - 6, y, 'right', fs); });
+  ctx.strokeStyle = 'rgba(94,234,212,.45)'; ctx.lineWidth = 1.2; ctx.beginPath();
+  for (i = 0; i < K; i++) { if (i === 0) ctx.moveTo(X(i), Y(x[i])); else ctx.lineTo(X(i), Y(x[i])); }
+  ctx.stroke();
+  ctx.fillStyle = '#5eead4';
+  var rad = r.w / K < 4 ? 1.6 : 2.4;
+  for (i = 0; i < K; i++) { ctx.beginPath(); ctx.arc(X(i), Y(x[i]), rad, 0, 6.2832); ctx.fill(); }
+  label(ctx, 'n = 0 … 95', r.x + r.w, r.y + r.h + 12, 'right', fs, '#a8b2cd');
+  label(ctx, 'xₙ', r.x + 4, r.y + r.h + 12, 'left', fs + 1, '#9ff3e4');
+  if (A.stationary) label(ctx, 'σταθερό σημείο: καμία ταλάντωση', r.x + r.w / 2, r.y + r.h / 2 - 14, 'center', fs + 1, '#ffe08a');
+}
+function drawScal() {
+  var ctx = ctxOf(cvScal), r = rectOf(cvScal), sm = small(), fs = sm ? 10 : 11, sc = DETAIL.sc, N = DETAIL.N;
+  ctx.clearRect(0, 0, cvScal._w, cvScal._h);
+  if (!A || A.escaped) return;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(scalImg, r.x, r.y, r.w, r.h);
+  // κώνος επιρροής
+  ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+  ctx.fillStyle = 'rgba(8,10,24,.55)';
+  [0, 1].forEach(function (side) {
+    ctx.beginPath();
+    for (var s = sc.n - 1; s >= 0; s--) {
+      var c0 = Math.min(N / 2, core.coiOf(sc.scales[s])), xx = side === 0 ? r.x + c0 / N * r.w : r.x + (N - c0) / N * r.w, y = periodY(r, sc, sc.log2[s]);
+      if (s === sc.n - 1) ctx.moveTo(side === 0 ? r.x : r.x + r.w, r.y), ctx.lineTo(xx, r.y);
+      ctx.lineTo(xx, y);
+    }
+    ctx.lineTo(side === 0 ? r.x + core.coiOf(sc.scales[0]) / N * r.w : r.x + (N - core.coiOf(sc.scales[0])) / N * r.w, r.y + r.h);
+    ctx.lineTo(side === 0 ? r.x : r.x + r.w, r.y + r.h); ctx.closePath(); ctx.fill();
+  });
+  ctx.restore();
+  drawPeriodAxis(ctx, r, sc, Math.floor(sc.log2[sc.n - 1] + 1e-9));
+  var tk = niceTicks(0, N, sm ? 4 : 8);
+  tk.ticks.forEach(function (t) {
+    var x = r.x + t / N * r.w;
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.moveTo(x, r.y + r.h); ctx.lineTo(x, r.y + r.h + 4); ctx.stroke();
+    if (x < r.x + r.w - 70) label(ctx, fmtInt(t), x, r.y + r.h + 13, t === 0 ? 'left' : 'center', fs);
+  });
+  label(ctx, 'χρόνος n →', r.x + r.w, r.y + r.h + 13, 'right', fs, '#9ff3e4');
+  if (A.stationary) label(ctx, 'σταθερό σημείο: καμία ταλάντωση — καμία ζώνη', r.x + r.w / 2, r.y + r.h / 2, 'center', fs + 1, '#ffe08a');
+}
+function drawSpec() {
+  var ctx = ctxOf(cvSpec), r = rectOf(cvSpec), sm = small(), fs = sm ? 10 : 11, sc = DETAIL.sc;
+  ctx.clearRect(0, 0, cvSpec._w, cvSpec._h);
+  var l0 = sc.log2[0], l1 = sc.log2[sc.n - 1];
+  var X = function (lg) { return r.x + (lg - l0) / (l1 - l0) * r.w; }, Y = function (v) { return r.y + (-v) / -FLOOR * r.h; };
+  for (var d = 0; d >= FLOOR; d -= 2) { var y = Y(d); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke(); label(ctx, d === 0 ? '1' : '10' + sup(d), r.x - 6, y, 'right', fs); }
+  var kMax = Math.floor(l1 + 1e-9);
+  for (var k = 1; k <= kMax; k++) {
+    var x = X(k); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); ctx.stroke();
+    if (k < kMax && (!sm || k % 2 === 1 || k <= 4)) label(ctx, String(Math.pow(2, k)), x, r.y + r.h + 13, 'center', fs);
+  }
+  label(ctx, 'περίοδος →', r.x + r.w, r.y + r.h + 13, 'right', fs, '#ffb3cd');
+  ctx.save(); ctx.translate(sm ? 10 : 13, r.y + r.h / 2); ctx.rotate(-Math.PI / 2); label(ctx, 'ισχύς', 0, 0, 'center', fs + 1, '#9ff3e4'); ctx.restore();
+  if (!A || A.escaped || A.stationary) { label(ctx, A && A.stationary ? 'σταθερό σημείο: κενό φάσμα' : '', r.x + r.w / 2, r.y + r.h / 2, 'center', fs + 1, '#ffe08a'); return; }
+  ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+  var grd = ctx.createLinearGradient(0, r.y, 0, r.y + r.h); grd.addColorStop(0, 'rgba(255,92,147,.35)'); grd.addColorStop(1, 'rgba(31,95,191,.05)');
+  ctx.beginPath(); ctx.moveTo(X(l0), r.y + r.h);
+  for (var s = 0; s < sc.n; s++) ctx.lineTo(X(sc.log2[s]), Y(Math.max(FLOOR - 0.2, A.logSpec[s])));
+  ctx.lineTo(X(l1), r.y + r.h); ctx.closePath(); ctx.fillStyle = grd; ctx.fill();
+  ctx.beginPath();
+  for (s = 0; s < sc.n; s++) { var yy = Y(Math.max(FLOOR - 0.2, A.logSpec[s])); if (s === 0) ctx.moveTo(X(sc.log2[s]), yy); else ctx.lineTo(X(sc.log2[s]), yy); }
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.restore();
+  A.peaks.forEach(function (p) {
+    var x = X(p.log2), y = Y(p.value);
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 6.2832); ctx.fillStyle = '#fff'; ctx.fill();
+    label(ctx, '≈' + fmtPeriod(p.period), x, Math.max(r.y + 8, y - 11), 'center', fs, '#fff');
+  });
+}
+function sup(n) { var m = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }; return String(n).split('').map(function (ch) { return m[ch] || ch; }).join(''); }
+function fmtPeriod(p) { return p >= 9.5 ? String(Math.round(p)) : fmt(p, 1); }
+
+/* ---------- μικρογραφία συνόλου Mandelbrot ---------- */
+var thumbImg = null;
+function thumbView() { var w = cvThumb._w, h = cvThumb._h, half = 1.45; return { cx: -0.78, cy: 0, hx: half, hy: half * h / w }; }
+function computeThumb() {
+  var w = Math.round(cvThumb._w), h = Math.round(cvThumb._h), v = thumbView(), oc = document.createElement('canvas');
+  oc.width = w; oc.height = h;
+  var octx = oc.getContext('2d'), id = octx.createImageData(w, h), px = id.data, N = 120;
+  for (var j = 0; j < h; j++) {
+    var b = v.cy + v.hy - (j + 0.5) / h * 2 * v.hy;
+    for (var i = 0; i < w; i++) {
+      var a = v.cx - v.hx + (i + 0.5) / w * 2 * v.hx, x = 0, y = 0, n = 0, o = (j * w + i) * 4;
+      for (n = 1; n <= N; n++) { var t = x * x - y * y + a; y = 2 * x * y + b; x = t; if (x * x + y * y > 4) break; }
+      if (n > N) { px[o] = 12; px[o + 1] = 10; px[o + 2] = 22; }
+      else { var k = Math.round(Math.min(1, Math.log(1 + n) / Math.log(1 + N)) * 1023) * 3; px[o] = LUT[k] * .8; px[o + 1] = LUT[k + 1] * .8; px[o + 2] = LUT[k + 2] * .8; }
+      px[o + 3] = 255;
+    }
+  }
+  octx.putImageData(id, 0, 0);
+  thumbImg = { canvas: oc, w: w, h: h };
+}
+function drawThumb() {
+  var ctx = ctxOf(cvThumb), w = cvThumb._w, h = cvThumb._h, v = thumbView();
+  if (!thumbImg || thumbImg.w !== Math.round(w) || thumbImg.h !== Math.round(h)) computeThumb();
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(thumbImg.canvas, 0, 0, w, h);
+  var X = function (a) { return (a - (v.cx - v.hx)) / (2 * v.hx) * w; }, y0 = h / 2;
+  ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(w, y0); ctx.stroke();
+  ctx.strokeStyle = '#5eead4'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(X(state.lo), y0); ctx.lineTo(X(state.hi), y0); ctx.stroke();
+  var cx = X(state.c);
+  ctx.beginPath(); ctx.arc(cx, y0, 6, 0, 6.2832); ctx.lineWidth = 3.5; ctx.strokeStyle = '#000'; ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+  label(ctx, '−2', X(-2), y0 + 14, 'center', 10, '#dfe6fb'); label(ctx, '¼', X(0.25), y0 + 14, 'center', 10, '#dfe6fb');
+  label(ctx, 'Re(c)', w - 4, y0 - 10, 'right', 10, '#9ff3e4');
+}
+
+/* ---------- πάνελ επιλεγμένου c ---------- */
+function bandsText() {
+  if (!A || A.escaped) return '—';
+  if (A.stationary) return 'καμία';
+  if (A.period === 0) {
+    var top = A.peaks.reduce(function (a, p) { return !a || p.value > a.value ? p : a; }, null);
+    return 'απλωμένο φάσμα' + (top ? ' (ισχυρότερη κορυφή ≈ ' + fmtPeriod(top.period) + ')' : '');
+  }
+  if (!A.peaks.length) return 'καμία σαφής κορυφή';
+  return A.peaks.map(function (p) { return '≈ ' + fmtPeriod(p.period); }).join(', ');
+}
+function componentText(c, p) {
+  if (c > -0.75) return ' Αυτό το c βρίσκεται στην τομή του πραγματικού άξονα με την κύρια καρδιοειδή του συνόλου Mandelbrot.';
+  var B = core.BIFURCATIONS;
+  for (var k = 0; k < B.length - 1; k++) if (c < B[k].c && c > B[k + 1].c && p === B[k].to) return ' Αυτό το c βρίσκεται στον «βολβό» περιόδου ' + p + ' του συνόλου Mandelbrot, πάνω στον πραγματικό άξονα.';
+  if (p === 3 && c < -1.74 && c > -1.80) return ' Εδώ ο άξονας διασχίζει ένα μικρό αντίγραφο του συνόλου Mandelbrot· η ίδια δομή επαναλαμβάνεται σε μικρότερη κλίμακα.';
+  return '';
+}
+function updatePanel() {
+  var c = state.c;
+  $('selC').textContent = fmtC(c);
+  $('detailC').textContent = 'c = ' + fmtC(c);
+  $('cOut').textContent = fmtC(c);
+  if (document.activeElement !== $('cInput')) $('cInput').value = fmtC(c).replace('−', '-');
+  var txt;
+  if (!A || A.escaped) { $('selP').textContent = '—'; $('selBands').textContent = '—'; $('selText').textContent = 'Η τροχιά διαφεύγει (|x| > 2). Για πραγματικά c αυτό συμβαίνει μόνο έξω από το [−2, 1/4].'; return; }
+  var p = A.period;
+  if (A.stationary || p === 1) {
+    $('selP').textContent = '1 (σταθερό σημείο)';
+    txt = 'Η τροχιά συγκλίνει σε ένα σημείο x* ≈ ' + fmt(A.x[A.x.length - 1], 6) + '. Δεν υπάρχει ταλάντωση, άρα ούτε ζώνες στο σκαλόγραμμα.' + componentText(c, 1);
+  } else if (p > 0) {
+    var pow2 = (p & (p - 1)) === 0;
+    $('selP').textContent = String(p);
+    if (pow2) {
+      var list = []; for (var q = 2; q <= p; q *= 2) list.push(q);
+      txt = 'Η τροχιά καταλήγει σε κύκλο περιόδου ' + p + '. ' + (p === 2 ? 'Η μία ζώνη, στην περίοδο 2, είναι η εναλλαγή ανάμεσα σε δύο τιμές.' : 'Οι ζώνες στις περιόδους ' + list.join(', ') + ' είναι οι υποαρμονικές: κάθε διπλασιασμός πρόσθεσε μία, μία οκτάβα χαμηλότερα από την προηγούμενη. Οι πιο πρόσφατες είναι οι ασθενέστερες.') + componentText(c, p);
+    } else {
+      txt = 'Η τροχιά καταλήγει σε κύκλο περιόδου ' + p + ' — ένα «παράθυρο» τάξης μέσα στην περιοχή του χάους.' + componentText(c, p);
+    }
+  } else {
+    $('selP').textContent = 'δεν βρέθηκε ≤ 1.024';
+    txt = Math.abs(c - core.C_INF) < 2e-5 ? 'Σημείο συσσώρευσης c∞: η τροχιά δεν είναι περιοδική — οι διπλασιασμοί έχουν συσσωρευτεί, και οι ζώνες συνεχίζουν προς όλο και μεγαλύτερες περιόδους.' :
+      'Δεν βρέθηκε περίοδος ≤ 1.024 με ανοχή 10⁻⁸. Η τροχιά μοιάζει χαοτική (το φάσμα απλώνεται σε πολλές περιόδους) ή συγκλίνει πολύ αργά, π.χ. κοντά σε σημείο διακλάδωσης.';
+  }
+  $('selBands').textContent = bandsText();
+  $('selText').textContent = txt;
+}
+
+/* ---------- σχεδίαση ---------- */
+var raf = 0, dirtyDetail = true;
+function render() {
+  if (raf) return;
+  raf = requestAnimationFrame(function () {
+    raf = 0;
+    if (dirtyDetail) { A = analyze(state.c); buildScalImage(); updatePanel(); dirtyDetail = false; }
+    drawBif(); drawSweep(); drawOrbit(); drawScal(); drawSpec(); drawThumb();
+  });
+}
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ALL.forEach(sizeCanvas);
+  bifImg = null;
+  if (!sweep || Math.abs(clamp(Math.round(rectOf(cvSweep).w), 160, 560) - sweep.cols) > sweep.cols * 0.25) startSweep();
+  render();
+}
+
+/* ---------- κατάσταση και έλεγχοι ---------- */
+var urlTimer = 0;
+function setC(c, opts) {
+  c = clamp(c, -2, 0.25);
+  if (c < state.lo || c > state.hi) setRange('full', true);
+  state.c = c; dirtyDetail = true;
+  if (!(opts && opts.fromSlider)) $('cSlider').value = Math.round((c - state.lo) / (state.hi - state.lo) * 20000);
+  clearTimeout(urlTimer);
+  urlTimer = setTimeout(function () { try { history.replaceState(null, '', '?c=' + c.toPrecision(10) + '&r=' + state.rangeKey); } catch (e) { } }, 300);
+  render();
+}
+function setRange(key, keepC) {
+  var R = RANGES[key]; if (!R) return;
+  state.rangeKey = key; state.lo = R.lo; state.hi = R.hi;
+  document.querySelectorAll('[data-range]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-range') === key); });
+  bifImg = null; startSweep();
+  if (!keepC && (state.c < R.lo || state.c > R.hi)) setC((R.lo + R.hi) / 2);
+  else $('cSlider').value = Math.round((state.c - state.lo) / (state.hi - state.lo) * 20000);
+  render();
+}
+function pointerSelect(cv) {
+  var down = false;
+  function at(e) { var r = rectOf(cv), b = cv.getBoundingClientRect(); setC(xToC(r, e.clientX - b.left)); }
+  cv.addEventListener('pointerdown', function (e) { down = true; stopPlay(); try { cv.setPointerCapture(e.pointerId); } catch (err) { } at(e); });
+  cv.addEventListener('pointermove', function (e) { if (down) at(e); });
+  ['pointerup', 'pointercancel'].forEach(function (t) { cv.addEventListener(t, function () { down = false; }); });
+  cv.addEventListener('keydown', function (e) {
+    var step = (state.hi - state.lo) / (e.shiftKey ? 2000 : 200);
+    if (e.key === 'ArrowLeft') { setC(state.c - step); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { setC(state.c + step); e.preventDefault(); }
+  });
+}
+function parseC(s) { s = String(s).trim().replace(/−/g, '-').replace(',', '.'); if (!/^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(s)) return NaN; return parseFloat(s); }
+
+/* ---------- σάρωση (κίνηση) ---------- */
+var play = null;
+function stopPlay() { if (!play) return; cancelAnimationFrame(play.raf); play = null; state.playing = false; $('playBtn').textContent = '▶ Σάρωση'; }
+function startPlay() {
+  stopPlay();
+  var lo = state.lo, hi = state.hi, c0 = state.c, geo = core.C_INF > lo && core.C_INF < hi;
+  if (geo && c0 <= core.C_INF + (hi - lo) * 2e-4) c0 = Math.min(hi, -0.70);
+  if (!geo && c0 <= lo + (hi - lo) * 0.01) c0 = hi;
+  var t0 = performance.now(), d0 = c0 - core.C_INF, kGeo = Math.log(4.6692) / 2.6, linSpeed = (hi - lo) / 16;
+  play = { raf: 0 }; state.playing = true; $('playBtn').textContent = '❚❚ Παύση';
+  (function step(now) {
+    if (!play) return;
+    var t = (now - t0) / 1000, c;
+    if (geo && c0 > core.C_INF) { c = core.C_INF + d0 * Math.exp(-kGeo * t); if (c - core.C_INF < 3e-6) { setC(c); stopPlay(); return; } }
+    else { c = c0 - linSpeed * t; if (c <= lo) { setC(lo); stopPlay(); return; } }
+    setC(c);
+    play.raf = requestAnimationFrame(step);
+  })(t0);
+}
+
+/* ---------- ήχος ---------- */
+var audio = { ctx: null, src: null };
+function stopAudio() { if (audio.src) { try { audio.src.stop(); } catch (e) { } audio.src = null; } $('listenBtn').textContent = '♪ Άκουσε την τροχιά'; }
+function playAudio() {
+  if (audio.src) { stopAudio(); return; }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { $('audioNote').textContent = 'Ο περιηγητής σας δεν υποστηρίζει Web Audio.'; return; }
+  if (!audio.ctx) audio.ctx = new AC();
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+  var sr = audio.ctx.sampleRate, hold = Math.max(2, Math.round(sr / 2640)), len = Math.round(sr * 2.5);
+  var nOrb = Math.ceil(len / hold) + 2, x = core.orbitReal(state.c, DETAIL.transient, nOrb);
+  if (!x) return;
+  var mean = 0, i; for (i = 0; i < nOrb; i++) mean += x[i]; mean /= nOrb;
+  var mx = 0; for (i = 0; i < nOrb; i++) mx = Math.max(mx, Math.abs(x[i] - mean));
+  var f2 = sr / (2 * hold);
+  if (mx < 1e-6) { $('audioNote').textContent = 'Σταθερό σημείο: καμία ταλάντωση — σιωπή.'; return; }
+  var buf = audio.ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), fade = Math.round(sr * 0.03);
+  for (i = 0; i < len; i++) {
+    var u = i / hold, k = Math.floor(u), f = u - k, v = ((x[k] - mean) * (1 - f) + (x[k + 1] - mean) * f) / mx;
+    var env = Math.min(1, i / fade, (len - 1 - i) / fade);
+    d[i] = v * env * 0.28;
+  }
+  var src = audio.ctx.createBufferSource(); src.buffer = buf; src.connect(audio.ctx.destination);
+  src.onended = function () { if (audio.src === src) { audio.src = null; $('listenBtn').textContent = '♪ Άκουσε την τροχιά'; } };
+  src.start(); audio.src = src;
+  $('listenBtn').textContent = '■ Σταμάτα';
+  $('audioNote').textContent = 'Περίοδος 2 ≈ ' + Math.round(f2) + ' Hz, περίοδος 4 ≈ ' + Math.round(f2 / 2) + ' Hz, περίοδος 8 ≈ ' + Math.round(f2 / 4) + ' Hz: κάθε διπλασιασμός = μία οκτάβα χαμηλότερα.';
+}
+
+/* ---------- πίνακας Feigenbaum και υπόμνημα ---------- */
+function buildTable() {
+  var B = core.BIFURCATIONS, h = '<thead><tr><th>Διπλασιασμός</th><th>c</th><th>Μήκος διαστήματος</th><th>Λόγος</th></tr></thead><tbody>';
+  for (var k = 0; k < B.length; k++) {
+    var L = k + 1 < B.length ? B[k].c - B[k + 1].c : null, Lp = k + 2 < B.length ? B[k + 1].c - B[k + 2].c : null;
+    h += '<tr><td>' + (B[k].to / 2) + ' → ' + B[k].to + '</td><td>' + fmt(B[k].c, 10) + '</td><td>' + (L ? fmt(L, 7) : '') + '</td><td>' + (L && Lp ? fmt(L / Lp, 3) : '') + '</td></tr>';
+  }
+  h += '<tr><td>συσσώρευση c∞</td><td>' + fmt(core.C_INF, 10) + '</td><td></td><td>→ δ ≈ 4.669</td></tr></tbody>';
+  $('feigTable').innerHTML = h;
+  var ramp = $('ramp');
+  ramp.style.background = 'linear-gradient(90deg,' + STOPS.map(function (s) { return 'rgb(' + s[1] + ',' + s[2] + ',' + s[3] + ') ' + (s[0] * 100) + '%'; }).join(',') + ')';
+  ['10⁻⁸', '10⁻⁶', '10⁻⁴', '10⁻²', '1'].forEach(function (t, i) { var sp = document.createElement('span'); sp.className = 't'; sp.style.left = (i / 4 * 100) + '%'; sp.textContent = t; ramp.appendChild(sp); });
+}
+
+/* ---------- εκκίνηση ---------- */
+function init() {
+  buildTable();
+  document.querySelectorAll('[data-range]').forEach(function (b) { b.addEventListener('click', function () { stopPlay(); setRange(b.getAttribute('data-range')); }); });
+  var box = $('presets');
+  PRESETS.forEach(function (p) {
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = p[1];
+    b.addEventListener('click', function () {
+      stopPlay();
+      var key = p[0] < -1.74 && p[0] > -1.80 ? 'p3' : (p[0] < -1.42 || p[0] > -0.7 ? 'full' : (p[0] < -1.385 && p[0] > -1.4025 ? 'deep' : 'cascade'));
+      if (state.rangeKey !== key && !(p[0] >= state.lo && p[0] <= state.hi && state.rangeKey !== 'full')) setRange(key, true);
+      setC(p[0]);
+    });
+    box.appendChild(b);
+  });
+  $('cSlider').addEventListener('input', function () { stopPlay(); setC(state.lo + (+$('cSlider').value) / 20000 * (state.hi - state.lo), { fromSlider: true }); });
+  function applyInput() {
+    var v = parseC($('cInput').value), m = $('inputMsg');
+    if (!isFinite(v)) { m.textContent = 'Δώστε έναν αριθμό, π.χ. −1.3.'; m.hidden = false; return; }
+    if (v < -2 || v > 0.25) { m.textContent = 'Για πραγματικά c έξω από το [−2, 1/4] η τροχιά του 0 διαφεύγει (δείτε το τρισδιάστατο τοπίο). Επιλέξτε τιμή μέσα στο διάστημα.'; m.hidden = false; return; }
+    m.hidden = true; stopPlay(); setC(v);
+  }
+  $('cInput').addEventListener('change', applyInput);
+  $('cInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { applyInput(); e.preventDefault(); } });
+  $('nudgeL').addEventListener('click', function () { stopPlay(); setC(state.c - (state.hi - state.lo) / 1000); });
+  $('nudgeR').addEventListener('click', function () { stopPlay(); setC(state.c + (state.hi - state.lo) / 1000); });
+  $('playBtn').addEventListener('click', function () { if (play) stopPlay(); else startPlay(); });
+  $('listenBtn').addEventListener('click', playAudio);
+  pointerSelect(cvBif); pointerSelect(cvSweep);
+  initPool();
+  try {
+    var q = new URLSearchParams(location.search), qc = parseC(q.get('c') || ''), qr = q.get('r');
+    if (RANGES[qr]) { state.rangeKey = qr; state.lo = RANGES[qr].lo; state.hi = RANGES[qr].hi; }
+    if (isFinite(qc) && qc >= -2 && qc <= 0.25) state.c = qc;
+    if (state.c < state.lo || state.c > state.hi) { state.rangeKey = 'full'; state.lo = -2; state.hi = 0.25; }
+  } catch (e) { }
+  document.querySelectorAll('[data-range]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-range') === state.rangeKey); });
+  $('cSlider').value = Math.round((state.c - state.lo) / (state.hi - state.lo) * 20000);
+  if (window.ResizeObserver) { var ro = new ResizeObserver(function () { clearTimeout(ro._t); ro._t = setTimeout(resize, 60); }); ro.observe(document.querySelector('.layout')); }
+  else window.addEventListener('resize', resize);
+  resize();
+  window.waveletApp = {
+    state: state, core: core, setC: setC, setRange: setRange, analysis: function () { return A; },
+    sweepStatus: function () { return sweep ? { cols: sweep.cols, done: sweep.done, complete: sweep.complete, lo: sweep.lo, hi: sweep.hi } : null; },
+    sweepAt: function (c) {
+      if (!sweep || !sweep.complete) return null;
+      var j = Math.floor((c - sweep.lo) / (sweep.hi - sweep.lo) * sweep.cols); if (j < 0 || j >= sweep.cols) return null;
+      return Array.prototype.slice.call(sweep.data, j * sweep.nS, (j + 1) * sweep.nS);
+    },
+    sweepScales: SWEEP.sc, detailScales: DETAIL.sc, isPlaying: function () { return !!play; }
+  };
+}
+init();
+})();
+</script>
+</body>
+</html>
